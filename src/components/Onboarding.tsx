@@ -1,0 +1,191 @@
+import { useState } from 'react';
+import { ExamBoard, Subject, UserProfile, StudentLevel } from '../types';
+import { GraduationCap, Check, Search, Plus } from 'lucide-react';
+import { cn } from '../utils';
+
+interface OnboardingProps {
+  onComplete: (data: Partial<UserProfile>) => void;
+}
+
+const levels: StudentLevel[] = [
+  'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7',
+  'Form 1', 'Form 2', 'Form 3', 'Form 4', 'O-Level',
+  'Form 5', 'Form 6', 'A-Level'
+];
+
+import { ALL_SUBJECTS as allSubjects } from '../constants';
+
+export function Onboarding({ onComplete }: OnboardingProps) {
+  const [step, setStep] = useState(1);
+  const [board, setBoard] = useState<ExamBoard | null>(null);
+  const [level, setLevel] = useState<StudentLevel | null>(null);
+  const [selectedSubjects, setSelectedSubjects] = useState<Subject[]>([]);
+  const [subjectSearch, setSubjectSearch] = useState('');
+  const [customSubjects, setCustomSubjects] = useState<Subject[]>([]);
+
+  const toggleSubject = (s: Subject) => {
+    setSelectedSubjects(prev => 
+      prev.includes(s) ? prev.filter(item => item !== s) : [...prev, s]
+    );
+  };
+
+  const addCustomSubject = () => {
+    if (subjectSearch && !allSubjects.includes(subjectSearch) && !customSubjects.includes(subjectSearch)) {
+      setCustomSubjects(prev => [...prev, subjectSearch]);
+      setSelectedSubjects(prev => [...prev, subjectSearch]);
+      setSubjectSearch('');
+    }
+  };
+
+  const combinedSubjects = [...allSubjects, ...customSubjects];
+  const filteredSubjects = combinedSubjects.filter(s => 
+    s.toLowerCase().includes(subjectSearch.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 transition-all duration-300">
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] max-w-lg w-full p-8 shadow-2xl space-y-8 border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+            <GraduationCap size={24} />
+          </div>
+          <h2 className="text-2xl font-bold dark:text-white tracking-tight">Welcome to Dzidzo</h2>
+        </div>
+
+        {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Which examination board are you under?</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">We'll tailor your experience based on your board.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {['ZIMSEC', 'Cambridge'].map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setBoard(b as ExamBoard)}
+                  className={cn(
+                    "p-6 rounded-2xl border-2 transition-all text-center",
+                    board === b 
+                      ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" 
+                      : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400"
+                  )}
+                >
+                  <span className="text-xl font-bold">{b}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              disabled={!board}
+              onClick={() => setStep(2)}
+              className="w-full bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+            >
+              Next Step
+            </button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">What is your current level?</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">This helps us provide grade-appropriate content.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2">
+              {levels.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLevel(l)}
+                  className={cn(
+                    "p-3 rounded-xl border text-sm transition-all text-center font-medium",
+                    level === l 
+                      ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" 
+                      : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400"
+                  )}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                disabled={!level}
+                onClick={() => setStep(3)}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+              >
+                Next Step
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Select your subjects</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Choose the subjects you are currently studying.</p>
+            </div>
+            
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text"
+                placeholder="Search subjects..."
+                value={subjectSearch}
+                onChange={(e) => setSubjectSearch(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto p-2">
+              {filteredSubjects.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => toggleSubject(s)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl border transition-all flex items-center gap-2 text-sm",
+                    selectedSubjects.includes(s)
+                      ? "bg-blue-600 border-blue-600 text-white"
+                      : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600"
+                  )}
+                >
+                  {selectedSubjects.includes(s) && <Check size={14} />}
+                  {s}
+                </button>
+              ))}
+              {subjectSearch && !combinedSubjects.some(s => s.toLowerCase() === subjectSearch.toLowerCase()) && (
+                <button
+                  onClick={addCustomSubject}
+                  className="px-4 py-2 rounded-xl border border-dashed border-blue-400 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/10 text-sm flex items-center gap-2"
+                >
+                  <Plus size={14} />
+                  Add "{subjectSearch}"
+                </button>
+              )}
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                disabled={selectedSubjects.length === 0}
+                onClick={() => onComplete({ examBoard: board!, selectedSubjects, level: level!, grade: level! })}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+              >
+                Start Learning
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

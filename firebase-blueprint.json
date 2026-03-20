@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Stores student profile information and preferences.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "grade": { "type": "string" },
+        "languagePreference": { "type": "string", "enum": ["English", "Shona", "Ndebele"] },
+        "studyStreak": { "type": "number" },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "languagePreference"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A single message in a tutoring session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "subject": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "role", "content", "timestamp", "uid"]
+    },
+    "ProgressRecord": {
+      "title": "ProgressRecord",
+      "description": "Tracks student performance on specific topics.",
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string" },
+        "topic": { "type": "string" },
+        "score": { "type": "number" },
+        "weaknessLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+        "lastAttempt": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string" }
+      },
+      "required": ["subject", "topic", "score", "weaknessLevel", "uid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document."
+    },
+    "/users/{userId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Chat history for a specific user."
+    },
+    "/users/{userId}/progress/{progressId}": {
+      "schema": "ProgressRecord",
+      "description": "Progress tracking for a specific user."
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Global announcements from admins."
+    },
+    "/resources/{resourceId}": {
+      "schema": "Resource",
+      "description": "Study materials uploaded by admins."
+    }
+  }
+}

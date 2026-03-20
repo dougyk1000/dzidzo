@@ -1,0 +1,7 @@
+{
+  "name": "Dzidzo Learning",
+  "description": "AI-powered ZIMSEC & Cambridge exam tutor with admin dashboard, study resources, and multilingual support (English, Shona, Ndebele).",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
