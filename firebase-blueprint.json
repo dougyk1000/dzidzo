@@ -15,6 +15,7 @@
         "syllabus": { "type": "string" },
         "subjects": { "type": "array", "items": { "type": "string" } },
         "chatbotName": { "type": "string" },
+        "bookmarkedResourceIds": { "type": "array", "items": { "type": "string" } },
         "onboardingComplete": { "type": "boolean" },
         "createdAt": { "type": "number" }
       },

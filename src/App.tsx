@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { GraduationCap, LayoutDashboard, MessageSquare, BookOpen, Settings, LogOut, LogIn, AlertTriangle, User, ShieldCheck, Megaphone, FileText, Timer, Link as LinkIcon, Search, Sun, Moon, Sparkles, Plus, Trash2, X, ClipboardCheck, Menu, Loader2, Check } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, MessageSquare, BookOpen, Settings, LogOut, LogIn, AlertTriangle, User, ShieldCheck, Megaphone, FileText, Timer, Link as LinkIcon, Search, Sun, Moon, Sparkles, Plus, Trash2, X, ClipboardCheck, Menu, Loader2, Check, RefreshCw, Bookmark, BookmarkCheck } from 'lucide-react';
 import { ALL_SUBJECTS } from './constants';
 import { LanguageToggle } from './components/LanguageToggle';
 import { ChatBox } from './components/ChatBox';
@@ -44,24 +44,42 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
       setHasError(true);
       setErrorInfo(event.error?.message || 'An unexpected error occurred.');
     };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      setHasError(true);
+      setErrorInfo(event.reason?.message || 'A network or asynchronous error occurred.');
+    };
     window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
   }, []);
 
   if (hasError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl max-w-md w-full text-center space-y-4">
-          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white font-sans">
+        <div className="max-w-md w-full bg-slate-800 p-8 rounded-[2rem] border border-slate-700 shadow-2xl space-y-6">
+          <div className="w-16 h-16 bg-rose-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-rose-900/20">
             <AlertTriangle size={32} />
           </div>
-          <h2 className="text-xl font-bold">Something went wrong</h2>
-          <p className="text-slate-500 text-sm">{errorInfo}</p>
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-bold">Portal Error</h2>
+            <p className="text-slate-400">The application encountered a critical error. This usually happens due to connection issues or missing data.</p>
+          </div>
+          {errorInfo && (
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
+              <p className="text-[10px] text-slate-500 font-mono uppercase mb-2">Error Log</p>
+              <pre className="text-xs text-rose-400 overflow-auto max-h-32">
+                {errorInfo}
+              </pre>
+            </div>
+          )}
           <button 
             onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700 transition-all"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20"
           >
-            Reload Application
+            Refresh Portal
           </button>
         </div>
       </div>
@@ -104,6 +122,8 @@ function DzidzoApp() {
   } | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [resourceSearch, setResourceSearch] = useState('');
+  const [resourceSubjectFilter, setResourceSubjectFilter] = useState('');
+  const [resourceBoardFilter, setResourceBoardFilter] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('dzidzo-theme');
@@ -284,6 +304,28 @@ function DzidzoApp() {
   };
 
   const handleLogout = () => signOut(auth);
+  
+  const handleToggleBookmark = async (resourceId: string) => {
+    if (!user || !profile) return;
+    
+    const currentBookmarks = profile.bookmarkedResourceIds || [];
+    const isBookmarked = currentBookmarks.includes(resourceId);
+    
+    const newBookmarks = isBookmarked 
+      ? currentBookmarks.filter(id => id !== resourceId)
+      : [...currentBookmarks, resourceId];
+      
+    setProfile({ ...profile, bookmarkedResourceIds: newBookmarks });
+    
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        bookmarkedResourceIds: newBookmarks
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      // Revert state on error if needed, though profile state update is optimistic
+    }
+  };
 
   const handleSendMessage = async (text: string) => {
     if (!user || !profile) return;
@@ -507,15 +549,24 @@ function DzidzoApp() {
   const isAdmin = user?.email === 'douglasnkowo3036@gmail.com' || profile?.role === 'admin';
   const isStaff = profile?.role === 'staff' || isAdmin;
 
+  useEffect(() => {
+    if (profile?.examBoard && !resourceBoardFilter) {
+      setResourceBoardFilter(profile.examBoard);
+    }
+  }, [profile?.examBoard]);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  const filteredResources = (resources || []).filter(r => 
-    r.examBoard === profile?.examBoard && 
-    (r.title.toLowerCase().includes(resourceSearch.toLowerCase()) || 
-     r.subject.toLowerCase().includes(resourceSearch.toLowerCase()))
-  );
+  const filteredResources = (resources || []).filter(r => {
+    const matchesSearch = r.title.toLowerCase().includes(resourceSearch.toLowerCase()) || 
+                         r.subject.toLowerCase().includes(resourceSearch.toLowerCase());
+    const matchesSubject = !resourceSubjectFilter || r.subject === resourceSubjectFilter;
+    const matchesBoard = !resourceBoardFilter || r.examBoard === resourceBoardFilter;
+    
+    return matchesSearch && matchesSubject && matchesBoard;
+  });
 
   return (
     <div className="min-h-screen font-sans transition-colors duration-300 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -904,38 +955,105 @@ function DzidzoApp() {
                 </div>
               </div>
 
-              <div className="relative max-w-md">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search resources by title or subject..."
-                  value={resourceSearch}
-                  onChange={(e) => setResourceSearch(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20 bg-white"
-                />
-              </div>
+              <div className="flex flex-col md:flex-row gap-4 items-end max-w-4xl">
+                <div className="relative flex-1 w-full">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Search Keyword</label>
+                  <Search className="absolute left-4 top-10 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Search resources by title or content..."
+                    value={resourceSearch}
+                    onChange={(e) => setResourceSearch(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-slate-900 transition-all dark:text-white"
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredResources.map(res => (
-                  <a 
-                    key={res.id} 
-                    href={res.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all group"
+                <div className="w-full md:w-48">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Subject</label>
+                  <select
+                    value={resourceSubjectFilter}
+                    onChange={(e) => setResourceSubjectFilter(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-slate-900 appearance-none transition-all dark:text-white"
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-slate-100 p-3 rounded-xl text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                        {res.type === 'Link' ? <LinkIcon size={24} /> : <FileText size={24} />}
+                    <option value="">All Subjects</option>
+                    {(profile?.selectedSubjects || []).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="General">General</option>
+                  </select>
+                </div>
+
+                <div className="w-full md:w-48">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Exam Board</label>
+                  <select
+                    value={resourceBoardFilter}
+                    onChange={(e) => setResourceBoardFilter(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-slate-900 appearance-none transition-all dark:text-white"
+                  >
+                    <option value="">All Boards</option>
+                    <option value="ZIMSEC">ZIMSEC</option>
+                    <option value="Cambridge">Cambridge</option>
+                  </select>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setResourceSearch('');
+                    setResourceSubjectFilter('');
+                    setResourceBoardFilter(profile?.examBoard || '');
+                  }}
+                  className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600 rounded-xl mb-0.5 transition-colors"
+                  title="Reset Filters"
+                >
+                  <RefreshCw size={20} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredResources.map(res => {
+                  const isBookmarked = profile?.bookmarkedResourceIds?.includes(res.id);
+                  return (
+                    <div 
+                      key={res.id} 
+                      className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group relative flex flex-col"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl text-slate-600 dark:text-slate-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 group-hover:text-blue-600 transition-colors">
+                          {res.type === 'Link' ? <LinkIcon size={24} /> : <FileText size={24} />}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleToggleBookmark(res.id);
+                            }}
+                            className={cn(
+                              "p-2 rounded-lg transition-all",
+                              isBookmarked 
+                                ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" 
+                                : "bg-slate-50 text-slate-400 dark:bg-slate-800 hover:text-amber-500"
+                            )}
+                            title={isBookmarked ? "Remove Bookmark" : "Bookmark Resource"}
+                          >
+                            {isBookmarked ? <BookmarkCheck size={18} fill="currentColor" /> : <Bookmark size={18} />}
+                          </button>
+                          <span className="text-[10px] font-bold uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg dark:text-slate-300">
+                            {res.subject}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest bg-slate-100 px-2 py-1 rounded-lg">
-                        {res.subject}
-                      </span>
+                      <a 
+                        href={res.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex-1"
+                      >
+                        <h3 className="font-bold text-lg mb-2 group-hover:text-blue-600 dark:text-white transition-colors">{res.title}</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{res.description}</p>
+                      </a>
                     </div>
-                    <h3 className="font-bold text-lg mb-2 group-hover:text-blue-600 transition-colors">{res.title}</h3>
-                    <p className="text-sm text-slate-500 line-clamp-2">{res.description}</p>
-                  </a>
-                ))}
+                  );
+                })}
                 {filteredResources.length === 0 && (
                   <div className="col-span-full p-12 text-center text-slate-400 italic">
                     {resourceSearch ? "No resources match your search." : "No resources uploaded yet. Check back soon!"}
@@ -1141,6 +1259,62 @@ function DzidzoApp() {
                       theme === 'dark' ? "right-1" : "left-1"
                     )} />
                   </button>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold dark:text-white flex items-center gap-2">
+                    <Bookmark className="text-amber-500" size={24} />
+                    My Bookmarks
+                  </h3>
+                </div>
+                
+                <div className="space-y-4">
+                  {(resources || []).filter(r => profile.bookmarkedResourceIds?.includes(r.id)).length > 0 ? (
+                    <div className="grid grid-cols-1 gap-4">
+                      {(resources || []).filter(r => profile.bookmarkedResourceIds?.includes(r.id)).map(res => (
+                        <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-amber-200 dark:hover:border-amber-900/30">
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-center text-slate-400">
+                              {res.type === 'Link' ? <LinkIcon size={18} /> : <FileText size={18} />}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-sm truncate dark:text-white">{res.title}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{res.subject} • {res.examBoard}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a 
+                              href={res.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            >
+                              <LinkIcon size={18} />
+                            </a>
+                            <button 
+                              onClick={() => handleToggleBookmark(res.id)}
+                              className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                      <Bookmark size={32} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-slate-400 text-sm">No bookmarked resources yet.</p>
+                      <button 
+                        onClick={() => setActiveTab('resources')}
+                        className="text-blue-600 text-sm font-bold mt-2 hover:underline"
+                      >
+                        Explore resources
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage } from '../types';
+import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage, Difficulty } from '../types';
 import { generateQuizQuestions, generateDiagram } from '../services/geminiService';
-import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, BookOpen } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, BookOpen, BarChart } from 'lucide-react';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -18,6 +18,7 @@ interface QuizSimulationProps {
 
 export function QuizSimulation({ board, level, language, availableSubjects, chatHistory, onComplete, autoStartSubject, autoStartTopic }: QuizSimulationProps) {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(autoStartSubject || null);
+  const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -35,7 +36,7 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
       if (currentQ && currentQ.diagramPrompt && !currentQ.imageUrl && !isImageLoading) {
         setIsImageLoading(true);
         try {
-          const url = await generateDiagram(currentQ.diagramPrompt);
+          const url = await generateDiagram(currentQ.diagramPrompt, selectedSubject || undefined, difficulty);
           setQuestions(prev => {
             const next = [...prev];
             next[currentIndex] = { ...next[currentIndex], imageUrl: url };
@@ -49,7 +50,7 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
       }
     }
     fetchImage();
-  }, [currentIndex, questions]);
+  }, [currentIndex, questions, selectedSubject, difficulty]);
 
   // Auto-start if initial props are provided
   useEffect(() => {
@@ -58,10 +59,11 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
     }
   }, [autoStartSubject, autoStartTopic]);
 
-  const startQuiz = async (subject: Subject, customTopic?: string) => {
+  const startQuiz = async (subject: Subject, customTopic?: string, customDifficulty?: Difficulty) => {
     setIsLoading(true);
     setSelectedSubject(subject);
     if (customTopic) setTopic(customTopic);
+    const finalDiff = customDifficulty || difficulty;
 
     // Format history for Gemini
     const history = chatHistory.slice(-10).map(m => ({
@@ -69,7 +71,7 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
       parts: [{ text: m.content }]
     }));
 
-    const q = await generateQuizQuestions(subject, board, level, language, history, customTopic || topic);
+    const q = await generateQuizQuestions(subject, board, level, language, history, customTopic || topic, 5, finalDiff);
     setQuestions(q);
     setIsLoading(false);
     setCurrentIndex(0);
@@ -122,8 +124,26 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
         <div className="relative z-10 text-center space-y-4 max-w-xl mx-auto mb-12">
           <h3 className="text-3xl font-bold dark:text-white">Ready for a Quiz?</h3>
           <p className="text-slate-500 dark:text-slate-400">
-            Choose a subject to generate 5 random questions based on the {board} syllabus.
+            Pick a difficulty and choose a subject to generate 5 tailored questions.
           </p>
+        </div>
+
+        <div className="flex justify-center gap-3 mb-10 relative z-20">
+          {(['Easy', 'Medium', 'Hard'] as Difficulty[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDifficulty(d)}
+              className={cn(
+                "px-8 py-3 rounded-2xl text-sm font-bold transition-all border-2 flex items-center gap-2",
+                difficulty === d 
+                  ? "bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-500/20" 
+                  : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-200 dark:hover:border-blue-900/50"
+              )}
+            >
+              <BarChart size={16} />
+              {d}
+            </button>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
@@ -189,11 +209,11 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
 
       <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm space-y-8">
         {currentQ.imageUrl ? (
-          <div className="mb-6 rounded-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800 max-h-80">
+          <div className="mb-6 rounded-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800 max-h-[400px] group/diagram transition-all hover:border-blue-300 dark:hover:border-blue-700">
             <img 
               src={currentQ.imageUrl} 
               alt="Quiz diagram" 
-              className="w-full h-full object-contain bg-white"
+              className="w-full h-full object-contain bg-white transition-transform group-hover/diagram:scale-[1.02]"
               referrerPolicy="no-referrer"
             />
           </div>

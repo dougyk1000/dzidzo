@@ -65,18 +65,46 @@ export function Dashboard({
 
   const getWeakTopics = () => progress.filter(p => p.weaknessLevel === 'high');
 
+  const subjectColors: Record<string, string> = {
+    'Maths': '#2563eb',
+    'Mathematics': '#2563eb',
+    'Science': '#10b981',
+    'Physics': '#10b981',
+    'Biology': '#ef4444',
+    'Chemistry': '#f59e0b',
+    'History': '#8b5cf6',
+    'English': '#ec4899',
+    'Geography': '#06b6d4'
+  };
+
+  const getSubjectColor = (s: string, index: number) => {
+    return subjectColors[s] || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'][index % 7];
+  };
+
   const chartData = useMemo(() => {
-    return progress
-      .filter(p => p.subject === activeSubject)
-      .sort((a, b) => new Date(a.lastAttempt).getTime() - new Date(b.lastAttempt).getTime())
-      .map(p => ({
-        topic: p.topic.length > 15 ? p.topic.substring(0, 12) + '...' : p.topic,
-        fullTopic: p.topic,
-        score: p.score,
-        date: new Date(p.lastAttempt).toLocaleDateString(),
-        type: p.type || 'study'
-      }));
-  }, [progress, activeSubject]);
+    const subjects = selectedSubjects;
+    const recordsBySubject: Record<string, ProgressRecord[]> = {};
+    
+    subjects.forEach(s => {
+      recordsBySubject[s] = progress
+        .filter(p => p.subject === s)
+        .sort((a, b) => new Date(a.lastAttempt).getTime() - new Date(b.lastAttempt).getTime());
+    });
+
+    const maxAttempts = Math.max(...Object.values(recordsBySubject).map(arr => arr.length), 0);
+    
+    return Array.from({ length: maxAttempts }, (_, i) => {
+      const entry: any = { attempt: `Attempt ${i + 1}`, effortIndex: i + 1 };
+      subjects.forEach(s => {
+        if (recordsBySubject[s][i]) {
+          entry[s] = recordsBySubject[s][i].score;
+          entry[`${s}_topic`] = recordsBySubject[s][i].topic;
+          entry[`${s}_date`] = new Date(recordsBySubject[s][i].lastAttempt).toLocaleDateString();
+        }
+      });
+      return entry;
+    });
+  }, [progress, selectedSubjects]);
 
   const handleDeepAnalysis = async () => {
     setIsAnalyzing(true);
@@ -276,39 +304,35 @@ export function Dashboard({
             <BarChart3 size={24} />
           </div>
           <div>
-            <h3 className="text-xl font-bold dark:text-slate-100">Performance Trend</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Your score progress in {activeSubject}.</p>
+            <h3 className="text-xl font-bold dark:text-slate-100">Performance Comparison</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Comparing your progress across all subjects.</p>
           </div>
         </div>
 
         <div className="h-64 w-full">
           {chartData.length > 0 ? (
             <>
-              <div className="flex items-center justify-end gap-4 mb-4">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Study</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Quiz</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-rose-500" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Test</span>
-                </div>
+              <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 mb-4">
+                {selectedSubjects.map((s, i) => (
+                  <div key={s} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getSubjectColor(s, i) }} />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">{s}</span>
+                  </div>
+                ))}
               </div>
               <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
-                  </linearGradient>
+                  {selectedSubjects.map((s, i) => (
+                    <linearGradient key={s} id={`color${s.replace(/\s+/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={getSubjectColor(s, i)} stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor={getSubjectColor(s, i)} stopOpacity={0}/>
+                    </linearGradient>
+                  ))}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis 
-                  dataKey="topic" 
+                  dataKey="attempt" 
                   axisLine={false} 
                   tickLine={false} 
                   tick={{ fill: '#94a3b8', fontSize: 10 }}
@@ -321,23 +345,33 @@ export function Dashboard({
                   tick={{ fill: '#94a3b8', fontSize: 10 }}
                 />
                 <RechartsTooltip 
-                  content={({ active, payload }) => {
+                  content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
-                      const data = payload[0].payload;
                       return (
-                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-xl">
-                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">{data.date}</p>
-                          <p className="font-bold text-slate-900 dark:text-white mb-1">{data.fullTopic}</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-blue-600 font-bold text-lg">{data.score}%</span>
-                            <span className={cn(
-                              "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
-                              data.type === 'test' ? "bg-rose-100 text-rose-600" :
-                              data.type === 'quiz' ? "bg-amber-100 text-amber-600" :
-                              "bg-emerald-100 text-emerald-600"
-                            )}>
-                              {data.type}
-                            </span>
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xl min-w-[200px] z-50">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2">{label}</p>
+                          <div className="space-y-4">
+                            {payload.map((p: any) => (
+                              <div key={p.name} className="flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                                    <span className="font-bold text-[11px] dark:text-white uppercase">{p.name}</span>
+                                  </div>
+                                  <span className="font-black text-blue-600 text-sm whitespace-nowrap">{p.value}%</span>
+                                </div>
+                                {p.payload[`${p.name}_topic`] && (
+                                  <div className="pl-4">
+                                    <p className="text-[10px] text-slate-400 truncate max-w-[180px] font-medium italic">
+                                      {p.payload[`${p.name}_topic`]}
+                                    </p>
+                                    <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tighter">
+                                      {p.payload[`${p.name}_date`]}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       );
@@ -345,36 +379,26 @@ export function Dashboard({
                     return null;
                   }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="score" 
-                  stroke="#2563eb" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorScore)" 
-                  animationDuration={1500}
-                  dot={({ cx, cy, payload }) => (
-                    <circle 
-                      key={`${cx}-${cy}`}
-                      cx={cx} 
-                      cy={cy} 
-                      r={4} 
-                      fill={
-                        payload.type === 'test' ? '#e11d48' : 
-                        payload.type === 'quiz' ? '#d97706' : 
-                        '#059669'
-                      } 
-                      stroke="white"
-                      strokeWidth={2}
-                    />
-                  )}
-                />
+                {selectedSubjects.map((s, i) => (
+                  <Area 
+                    key={s}
+                    type="monotone" 
+                    dataKey={s}
+                    name={s}
+                    stroke={getSubjectColor(s, i)} 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill={`url(#color${s.replace(/\s+/g, '')})`} 
+                    animationDuration={1500}
+                    activeDot={{ r: 6, strokeWidth: 2, stroke: 'white' }}
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
             </>
           ) : (
             <div className="h-full flex items-center justify-center text-slate-400 italic text-sm border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
-              Complete more topics in {activeSubject} to see your performance graph.
+              Complete topics in your subjects to see your performance comparison graph.
             </div>
           )}
         </div>

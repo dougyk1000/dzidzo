@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage } from '../types';
+import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage, Difficulty } from '../types';
 import { generateMockExam, generateDiagram } from '../services/geminiService';
-import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, ClipboardCheck, Search, Sparkles, Timer as TimerIcon, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, ClipboardCheck, Search, Sparkles, Timer as TimerIcon, AlertCircle, BarChart } from 'lucide-react';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { playBeep } from '../utils/audio';
@@ -19,6 +19,7 @@ interface MockExamsProps {
 
 export function MockExams({ board, level, language, chatHistory, availableSubjects, onComplete, autoStartSubject, autoStartTopic }: MockExamsProps) {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(autoStartSubject || null);
+  const [difficulty, setDifficulty] = useState<Difficulty>('Hard');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -38,7 +39,7 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
       if (currentQ && currentQ.diagramPrompt && !currentQ.imageUrl && !isImageLoading) {
         setIsImageLoading(true);
         try {
-          const url = await generateDiagram(currentQ.diagramPrompt);
+          const url = await generateDiagram(currentQ.diagramPrompt, selectedSubject || undefined, difficulty);
           setQuestions(prev => {
             const next = [...prev];
             next[currentIndex] = { ...next[currentIndex], imageUrl: url };
@@ -52,7 +53,7 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
       }
     }
     fetchImage();
-  }, [currentIndex, questions]);
+  }, [currentIndex, questions, selectedSubject, difficulty]);
 
   // Timer logic
   useEffect(() => {
@@ -92,10 +93,11 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
     }
   }, [autoStartSubject, autoStartTopic]);
 
-  const startExam = async (subject: Subject, customTopic?: string) => {
+  const startExam = async (subject: Subject, customTopic?: string, customDifficulty?: Difficulty) => {
     setIsLoading(true);
     setSelectedSubject(subject);
     if (customTopic) setTopic(customTopic);
+    const finalDiff = customDifficulty || difficulty;
     
     // Format history for Gemini
     const history = chatHistory.slice(-10).map(m => ({
@@ -103,7 +105,7 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
       parts: [{ text: m.content }]
     }));
 
-    const q = await generateMockExam(subject, board, level, language, history, customTopic || topic, 10);
+    const q = await generateMockExam(subject, board, level, language, history, customTopic || topic, 10, finalDiff);
     setQuestions(q);
     const duration = q.length * 90; // 1.5 minutes per question
     setTimeLeft(duration);
@@ -167,8 +169,26 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
         <div className="space-y-4 relative z-10 text-center mb-12">
           <h3 className="text-3xl font-black dark:text-white tracking-tight">Full Mock Exam</h3>
           <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Select a subject to test your knowledge. This exam is generated based on your recent lessons and the {board} syllabus.
+            Select a difficulty and subject to test your knowledge. This exam is generated based on your recent lessons and the {board} syllabus.
           </p>
+        </div>
+
+        <div className="flex justify-center gap-3 mb-10 relative z-20">
+          {(['Easy', 'Medium', 'Hard'] as Difficulty[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDifficulty(d)}
+              className={cn(
+                "px-8 py-3 rounded-2xl text-sm font-bold transition-all border-2 flex items-center gap-2",
+                difficulty === d 
+                  ? "bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-500/20" 
+                  : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-200 dark:hover:border-blue-900/50"
+              )}
+            >
+              <BarChart size={16} />
+              {d}
+            </button>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
@@ -291,11 +311,11 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
         <div className="absolute top-0 left-0 w-1 h-full bg-blue-600" />
         
         {currentQ.imageUrl ? (
-          <div className="mb-6 rounded-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800 max-h-96">
+          <div className="mb-6 rounded-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800 max-h-[450px] group/diagram transition-all hover:border-blue-300 dark:hover:border-blue-700">
             <img 
               src={currentQ.imageUrl} 
               alt="Question diagram" 
-              className="w-full h-full object-contain bg-white"
+              className="w-full h-full object-contain bg-white transition-transform group-hover/diagram:scale-[1.02]"
               referrerPolicy="no-referrer"
             />
           </div>

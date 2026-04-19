@@ -1,5 +1,7 @@
 export type Language = 'English' | 'Shona' | 'Ndebele';
 
+export type Difficulty = 'Easy' | 'Medium' | 'Hard';
+
 export type Subject = string; // Allow dynamic subjects
 
 export type ExamBoard = 'ZIMSEC' | 'Cambridge';
@@ -23,6 +25,7 @@ export interface UserProfile {
   role: 'student' | 'staff' | 'admin';
   tutorStyle?: string;
   chatbotName?: string;
+  bookmarkedResourceIds?: string[];
 }
 
 export interface Homework {

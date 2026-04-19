@@ -1,5 +1,5 @@
 import { GoogleGenAI, GenerateContentResponse, Type, FunctionDeclaration } from "@google/genai";
-import { Language, Subject, ExamBoard, QuizQuestion, Resource, ProgressRecord } from "../types";
+import { Language, Subject, ExamBoard, QuizQuestion, Resource, ProgressRecord, Difficulty } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
@@ -37,8 +37,11 @@ PERSONALIZATION:
 - Use ${studentName || 'the student'}'s name frequently.
 - Refer to their "STUDENT PROGRESS" to identify weak topics. If a student is "high" weakness in a topic, spend more time explaining it.
 - Congratulate them on "low" weakness topics.
+- Analyze their progress trends and refer to previous scores.
+- When suggesting a test or quiz, ALWAYS use the 'start_assessment' tool.
 - Adapt your wording to fit the student's communication style as defined in the TUTOR STYLE.
 - Make the learning experience feel personal and supportive.
+- You have full visibility into their stats, so act like a tutor who has been with them for a long time.
 
 ${homeworkContext ? `
 CURRENT HOMEWORK CONTEXT:
@@ -172,7 +175,7 @@ export async function getTutorResponse(
       
       if (toolCall.name === 'generate_diagram') {
         const toolArgs = toolCall.args as { prompt: string; labelItems?: string[] };
-        const diagramUrl = await generateDiagram(toolArgs.prompt, toolArgs.labelItems);
+        const diagramUrl = await generateDiagram(toolArgs.prompt, undefined, undefined, toolArgs.labelItems);
         return {
           text: response.text || "Here is a diagram to help visualize the concept:",
           imageUrl: diagramUrl,
@@ -337,19 +340,29 @@ export async function generateQuizQuestions(
   language: Language,
   history: any[] = [],
   topic?: string,
-  count: number = 5
+  count: number = 5,
+  difficulty: Difficulty = 'Medium'
 ): Promise<QuizQuestion[]> {
   try {
     const model = "gemini-3-flash-preview";
     const topicPrompt = topic ? `\n\nFOCUS TOPIC: ${topic}` : "";
+    const difficultyPrompt = `\n\nDIFFICULTY LEVEL: ${difficulty}`;
     const historyContext = history.length > 0
       ? `\n\nCONTEXT FROM PREVIOUS DISCUSSION:\n${history.map(m => `Role: ${m.role}\nContent: ${m.parts[0].text}`).join('\n---\n')}`
       : "";
 
     const prompt = `Generate ${count} multiple-choice questions for ${board} ${level} ${subject} in ${language}. 
       Each question must have 4 options, a correct answer index (0-3), and a brief explanation.
-      If the question references a biological structure, physical diagram, chemical reaction apparatus, or geometric shape, you MUST include a "diagramPrompt" field with a detailed description for an image generator (e.g. "A labelled diagram of a mitosis cell cycle").
-      Follow typical ${board} ${level} exam style and difficulty.${topicPrompt}${historyContext}`;
+      The difficulty should be ${difficulty}.
+      
+      VISUAL AIDS (CRITICAL):
+      - If the question involves a biological cell, plant structure, organ, or ecosystem, you MUST provide a "diagramPrompt".
+      - If it involves a physics experiment, circuit diagram, force vector diagram, or ray diagram, you MUST provide a "diagramPrompt".
+      - If it involves a chemical apparatus, molecular structure, or periodic trends, you MUST provide a "diagramPrompt".
+      - If it involves a geometric shape, trigonometric graph, or function plotter, you MUST provide a "diagramPrompt".
+      - The "diagramPrompt" should be a detailed description for an image generator (e.g. "A high-contrast, labelled diagram of a Bunsen burner heating a beaker on a tripod").
+      
+      Follow typical ${board} ${level} exam style.${topicPrompt}${difficultyPrompt}${historyContext}`;
 
     const response = await ai.models.generateContent({
       model,
@@ -385,16 +398,18 @@ export async function generateQuizQuestions(
   }
 }
 
-export async function generateDiagram(prompt: string, labels?: string[]): Promise<string> {
+export async function generateDiagram(prompt: string, subject?: string, difficulty?: string, labels?: string[]): Promise<string> {
   try {
     const labelPrompt = labels && labels.length > 0 ? ` Please clearly label: ${labels.join(', ')}.` : '';
-    const finalPrompt = `A pedagogical, high-quality, clear educational diagram or scientific illustration of: ${prompt}.${labelPrompt} Use a clean, educational style suitable for a school textbook.`;
+    const contextPrompt = (subject || difficulty) ? ` (Subject: ${subject || ''}, Difficulty: ${difficulty || ''})` : '';
+    const finalPrompt = `A pedagogical, high-quality, clear educational diagram or scientific illustration of: ${prompt}.${labelPrompt}${contextPrompt} Use a clean, educational style suitable for a school textbook. Black and white or simple colors. No unnecessary backgrounds.`;
     
     const response = await ai.models.generateContent({
       model: 'gemini-3.1-flash-image-preview',
-      contents: {
+      contents: [{
+        role: 'user',
         parts: [{ text: finalPrompt }]
-      },
+      }],
       config: {
         imageConfig: {
           aspectRatio: "1:1"
@@ -402,11 +417,19 @@ export async function generateDiagram(prompt: string, labels?: string[]): Promis
       }
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+    const candidates = (response as any).candidates;
+    const parts = candidates?.[0]?.content?.parts;
+    
+    if (parts) {
+      for (const part of parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
       }
     }
+    
+    // Fallback if image generation is not supported for this model or fails
+    console.warn("No image data in response", response);
     return '';
   } catch (error) {
     console.error("Image Generation Error:", error);
@@ -421,7 +444,8 @@ export async function generateMockExam(
   language: Language,
   history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [],
   topic?: string,
-  count: number = 10
+  count: number = 10,
+  difficulty: Difficulty = 'Hard'
 ): Promise<QuizQuestion[]> {
   try {
     const model = "gemini-3-flash-preview";
@@ -433,12 +457,16 @@ export async function generateMockExam(
     const topicPrompt = topic ? `\n\nFOCUS TOPIC: ${topic}` : "";
 
     const prompt = `Generate a comprehensive ${count}-question mock exam for ${board} ${level} ${subject} in ${language}. 
+    DIFFICULTY LEVEL: ${difficulty}
     ${topicPrompt}
     ${contextPrompt}
     
-    The questions should be a mix of difficulty levels (easy, medium, hard) and follow the official ${board} ${level} exam style.
+    The questions should follow the official ${board} ${level} exam style at ${difficulty} difficulty.
     Each question must have 4 options, a correct answer index (0-3), and a detailed explanation.
-    If the question references a complex concept and would benefit from a visual aid (e.g. geography map, science apparatus, geometry sketch), include a "diagramPrompt" for an AI image generator.
+    
+    VISUAL AIDS:
+    - Include a "diagramPrompt" if the question references a complex concept and would benefit from a visual aid (e.g. geography map, scientific apparatus, geometry sketch, biological diagram).
+    - Provide a detailed description for the generator in the "diagramPrompt" field.
     
     Return the result as a JSON array of objects with the following structure:
     [
