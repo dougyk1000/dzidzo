@@ -1,170 +1,107 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: /users/{userId}
-    // Document ID: userId (string)
-    // Fields:
-    //   - id: string (required)
-    //   - name: string (required, size < 100)
-    //   - grade: string (optional)
-    //   - languagePreference: string (required, enum: English, Shona, Ndebele)
-    //   - studyStreak: number (optional, >= 0)
-    //   - lastActive: string (optional, ISO 8601 format)
-    //
-    // Collection: /users/{userId}/messages/{messageId}
-    // Document ID: messageId (string)
-    // Fields:
-    //   - id: string (required)
-    //   - role: string (required, enum: user, assistant)
-    //   - content: string (required, size < 5000)
-    //   - timestamp: number (required)
-    //   - subject: string (optional)
-    //   - uid: string (required, matches userId)
-    //
-    // Collection: /users/{userId}/progress/{progressId}
-    // Document ID: progressId (string)
-    // Fields:
-    //   - subject: string (required)
-    //   - topic: string (required)
-    //   - score: number (required, 0-100)
-    //   - weaknessLevel: string (required, enum: low, medium, high)
-    //   - lastAttempt: string (optional, ISO 8601 format)
-    //   - uid: string (required, matches userId)
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    
-    function isAuthenticated() {
+    // --- Helpers ---
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
     }
 
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function incoming() {
+      return request.resource.data;
     }
 
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    function existing() {
+      return resource.data;
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "douglasnkowo0145@gmail.com" && request.auth.token.email_verified == true) ||
-          (request.auth.token.email == "douglasnkowo3036@gmail.com" && request.auth.token.email_verified == true));
+      return isSignedIn() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "douglasnkowo0145@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-
-    function isValidUserProfile(data) {
-      return hasRequiredFields(['id', 'name', 'languagePreference', 'examBoard', 'selectedSubjects']) &&
-             hasOnlyAllowedFields(['id', 'name', 'grade', 'languagePreference', 'examBoard', 'selectedSubjects', 'studyStreak', 'lastActive', 'role']) &&
-             data.id is string && data.id.size() < 100 &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.languagePreference in ['English', 'Shona', 'Ndebele'] &&
-             data.examBoard in ['ZIMSEC', 'Cambridge'] &&
-             data.selectedSubjects is list &&
-             (!('grade' in data) || data.grade is string) &&
-             (!('studyStreak' in data) || (data.studyStreak is number && data.studyStreak >= 0)) &&
-             (!('lastActive' in data) || isValidDateString(data.lastActive));
+    function isStaff() {
+      return isSignedIn() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['staff', 'admin'] ||
+         isAdmin());
     }
 
-    function isValidAnnouncement(data) {
-      return hasRequiredFields(['id', 'title', 'content', 'timestamp', 'author']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 5000;
+    // --- Validation Helpers ---
+    function isValidUser(data) {
+      return data.id is string && data.id == request.auth.uid &&
+             data.role in ['student', 'staff', 'admin'];
     }
 
-    function isValidResource(data) {
-      return hasRequiredFields(['id', 'title', 'description', 'url', 'subject', 'examBoard', 'type', 'timestamp']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.description is string &&
-             data.url is string &&
-             data.subject in ['Maths', 'Physics', 'Chemistry', 'Biology', 'English'] &&
-             data.examBoard in ['ZIMSEC', 'Cambridge'] &&
-             data.type in ['PDF', 'Link', 'Note'];
+    function isValidMessage(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.role in ['user', 'assistant'];
     }
 
-    function isValidChatMessage(data, userId) {
-      return hasRequiredFields(['id', 'role', 'content', 'timestamp', 'uid']) &&
-             hasOnlyAllowedFields(['id', 'role', 'content', 'timestamp', 'subject', 'uid']) &&
-             data.id is string &&
-             data.role in ['user', 'assistant'] &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
-             data.timestamp is number &&
-             data.uid == userId &&
-             (!('subject' in data) || data.subject is string);
+    function isValidProgress(data) {
+      return data.uid is string && data.uid == request.auth.uid;
     }
 
-    function isValidProgressRecord(data, userId) {
-      return hasRequiredFields(['subject', 'topic', 'score', 'weaknessLevel', 'uid']) &&
-             hasOnlyAllowedFields(['subject', 'topic', 'score', 'weaknessLevel', 'lastAttempt', 'uid']) &&
-             data.subject is string &&
-             data.topic is string &&
-             data.score is number && data.score >= 0 && data.score <= 100 &&
-             data.weaknessLevel in ['low', 'medium', 'high'] &&
-             data.uid == userId &&
-             (!('lastAttempt' in data) || isValidDateString(data.lastAttempt));
-    }
+    // --- Collections ---
 
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
+    // Users
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data) && (!('role' in request.resource.data) || request.resource.data.role == 'student');
-      allow update: if (isOwner(userId) && isValidUserProfile(request.resource.data) && request.resource.data.role == resource.data.role) || isAdmin();
-
-      match /messages/{messageId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidChatMessage(request.resource.data, userId);
-        allow update: if false; // Messages are immutable
-        allow delete: if isOwner(userId);
-      }
-
-      match /progress/{progressId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidProgressRecord(request.resource.data, userId);
-        allow update: if isOwner(userId) && isValidProgressRecord(request.resource.data, userId);
-        allow delete: if isOwner(userId);
-      }
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) || isAdmin();
     }
 
+    // Announcements
     match /announcements/{announcementId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() && isValidAnnouncement(request.resource.data);
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
 
+    // Resources
     match /resources/{resourceId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() && isValidResource(request.resource.data);
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
 
-    // Default deny
-    match /{path=**} {
-      allow read, write: if false;
+    // Messages
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidMessage(incoming());
+      allow update: if isAdmin() || (isSignedIn() && existing().uid == request.auth.uid && incoming().uid == existing().uid);
+      allow delete: if isAdmin();
+    }
+
+    // Homework
+    match /homework/{homeworkId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+
+    // Progress
+    match /progress/{progressId} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidProgress(incoming());
+      allow update, delete: if isAdmin();
+    }
+    
+    // Weekly Summaries
+    match /weekly_summaries/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
     }
   }
 }

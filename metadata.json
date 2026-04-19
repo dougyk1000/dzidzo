@@ -1,6 +1,6 @@
 {
-  "name": "Dzidzo Learning",
-  "description": "AI-powered ZIMSEC & Cambridge exam tutor with admin dashboard, study resources, and multilingual support (English, Shona, Ndebele).",
+  "name": "Marchwood Senior School",
+  "description": "The official learning platform for Marchwood Senior School. AI-powered tutor (Dzidzo), full-length mock exams, and homework management for students and staff.",
   "requestFramePermissions": [
     "camera"
   ]

@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Announcement, Resource, Subject, ExamBoard } from '../types';
 import { Plus, Trash2, Megaphone, FileText, Loader2, Link as LinkIcon, RefreshCw, Sparkles } from 'lucide-react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db } from '../firebase';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  writeBatch 
+} from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../utils/firestore-errors';
 import { cn } from '../utils';
 
 export function AdminDashboard() {
@@ -28,13 +38,20 @@ export function AdminDashboard() {
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
 
   useEffect(() => {
-    const unsubAnn = onSnapshot(query(collection(db, 'announcements'), orderBy('timestamp', 'desc')), (snapshot) => {
-      setAnnouncements(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Announcement)));
-    });
-    const unsubRes = onSnapshot(query(collection(db, 'resources'), orderBy('timestamp', 'desc')), (snapshot) => {
-      setResources(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
-    });
-    return () => { unsubAnn(); unsubRes(); };
+    const annQuery = query(collection(db, 'announcements'), orderBy('timestamp', 'desc'));
+    const unsubAnn = onSnapshot(annQuery, (snapshot) => {
+      setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Announcement)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'announcements'));
+
+    const resQuery = query(collection(db, 'resources'), orderBy('timestamp', 'desc'));
+    const unsubRes = onSnapshot(resQuery, (snapshot) => {
+      setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'resources'));
+
+    return () => {
+      unsubAnn();
+      unsubRes();
+    };
   }, []);
 
   const handleAddAnnouncement = async (e: React.FormEvent) => {
@@ -50,7 +67,7 @@ export function AdminDashboard() {
       setAnnTitle('');
       setAnnContent('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'announcements');
+      handleFirestoreError(error, OperationType.WRITE, 'announcements');
     }
     setIsLoading(false);
   };
@@ -72,7 +89,7 @@ export function AdminDashboard() {
       setResDesc('');
       setResUrl('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'resources');
+      handleFirestoreError(error, OperationType.WRITE, 'resources');
     }
     setIsLoading(false);
   };
@@ -81,12 +98,10 @@ export function AdminDashboard() {
     if (!quizTopic) return;
     setIsGeneratingQuiz(true);
     try {
-      // In a real app, this would call Gemini to generate a quiz
-      // and then save it to a 'quizzes' collection
       await addDoc(collection(db, 'resources'), {
         title: `AI Quiz: ${quizTopic} (${quizBoard})`,
         description: `Automatically generated quiz for ${quizSubject} - ${quizTopic}.`,
-        url: "#", // Placeholder for quiz link
+        url: "#",
         subject: quizSubject,
         examBoard: quizBoard,
         type: 'Note',
@@ -96,22 +111,21 @@ export function AdminDashboard() {
       setQuizTopic('');
       alert("AI Quiz generated and added to resources!");
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'resources');
+      handleFirestoreError(error, OperationType.WRITE, 'resources');
     }
     setIsGeneratingQuiz(false);
   };
 
-  const handleDelete = async (coll: string, id: string) => {
+  const handleDelete = async (table: string, id: string) => {
     try {
-      await deleteDoc(doc(db, coll, id));
+      await deleteDoc(doc(db, table, id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `${table}/${id}`);
     }
   };
 
   const handleSyncResources = async () => {
     setIsLoading(true);
-    // Simulate syncing from an external source (like Google Drive or Notion via n8n)
     await new Promise(resolve => setTimeout(resolve, 2000));
     const mockExternalResources = [
       {
@@ -135,18 +149,37 @@ export function AdminDashboard() {
     ];
 
     try {
-      for (const res of mockExternalResources) {
-        await addDoc(collection(db, 'resources'), res);
-      }
+      const batch = writeBatch(db);
+      mockExternalResources.forEach(res => {
+        const newDocRef = doc(collection(db, 'resources'));
+        batch.set(newDocRef, res);
+      });
+      await batch.commit();
       alert("Resources synced successfully from external sources!");
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'resources');
+      handleFirestoreError(error, OperationType.WRITE, 'resources');
     }
     setIsLoading(false);
   };
 
   return (
     <div className="space-y-12 pb-12">
+      <div className="relative h-64 rounded-[2.5rem] overflow-hidden mb-8 shadow-xl">
+        <img src="https://picsum.photos/seed/admin-portal/1200/600" alt="Admin" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent flex items-center p-12">
+          <div className="text-white max-w-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/30">
+                <Sparkles className="text-white" size={24} />
+              </div>
+              <span className="text-sm font-bold tracking-widest uppercase text-blue-400">Administration</span>
+            </div>
+            <h1 className="text-5xl font-black mb-4 leading-tight">Admin Portal</h1>
+            <p className="text-lg text-slate-300 leading-relaxed">Manage Marchwood Senior School resources, announcements, and AI-powered learning tools.</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end">
         <button
           onClick={handleSyncResources}

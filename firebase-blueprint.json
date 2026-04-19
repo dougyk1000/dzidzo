@@ -1,68 +1,124 @@
 {
   "entities": {
     "UserProfile": {
-      "title": "UserProfile",
-      "description": "Stores student profile information and preferences.",
+      "title": "User Profile",
+      "description": "Stores user profile information",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "email": { "type": "string" },
         "name": { "type": "string" },
-        "grade": { "type": "string" },
-        "languagePreference": { "type": "string", "enum": ["English", "Shona", "Ndebele"] },
-        "studyStreak": { "type": "number" },
-        "lastActive": { "type": "string", "format": "date-time" }
+        "fullName": { "type": "string" },
+        "role": { "type": "string" },
+        "class": { "type": "string" },
+        "level": { "type": "string" },
+        "syllabus": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "chatbotName": { "type": "string" },
+        "onboardingComplete": { "type": "boolean" },
+        "createdAt": { "type": "number" }
       },
-      "required": ["id", "name", "languagePreference"]
+      "required": ["id", "email", "name", "role", "onboardingComplete"]
     },
-    "ChatMessage": {
-      "title": "ChatMessage",
-      "description": "A single message in a tutoring session.",
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Stores school announcements",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "title": { "type": "string" },
         "content": { "type": "string" },
         "timestamp": { "type": "number" },
-        "subject": { "type": "string" },
-        "uid": { "type": "string" }
+        "author": { "type": "string" }
       },
-      "required": ["id", "role", "content", "timestamp", "uid"]
+      "required": ["title", "content", "timestamp", "author"]
     },
-    "ProgressRecord": {
-      "title": "ProgressRecord",
-      "description": "Tracks student performance on specific topics.",
+    "Resource": {
+      "title": "Resource",
+      "description": "Stores educational resources",
       "type": "object",
       "properties": {
+        "title": { "type": "string" },
+        "type": { "type": "string" },
         "subject": { "type": "string" },
-        "topic": { "type": "string" },
-        "score": { "type": "number" },
-        "weaknessLevel": { "type": "string", "enum": ["low", "medium", "high"] },
-        "lastAttempt": { "type": "string", "format": "date-time" },
-        "uid": { "type": "string" }
+        "level": { "type": "string" },
+        "url": { "type": "string" },
+        "timestamp": { "type": "number" }
       },
-      "required": ["subject", "topic", "score", "weaknessLevel", "uid"]
+      "required": ["title", "type", "subject", "level", "timestamp"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Stores chat messages",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "content": { "type": "string" },
+        "role": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["uid", "content", "role", "timestamp"]
+    },
+    "Homework": {
+      "title": "Homework",
+      "description": "Stores homework assignments",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "subject": { "type": "string" },
+        "level": { "type": "string" },
+        "examBoard": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["title", "subject", "level", "dueDate", "authorId", "authorName", "timestamp"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "Stores student progress",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "subject": { "type": "string" },
+        "score": { "type": "number" },
+        "topic": { "type": "string" },
+        "type": { "type": "string" },
+        "lastAttempt": { "type": "string" },
+        "weaknessLevel": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["uid", "subject", "score", "type", "timestamp"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "UserProfile",
-      "description": "User profile document."
-    },
-    "/users/{userId}/messages/{messageId}": {
-      "schema": "ChatMessage",
-      "description": "Chat history for a specific user."
-    },
-    "/users/{userId}/progress/{progressId}": {
-      "schema": "ProgressRecord",
-      "description": "Progress tracking for a specific user."
+      "description": "User profile collection"
     },
     "/announcements/{announcementId}": {
       "schema": "Announcement",
-      "description": "Global announcements from admins."
+      "description": "Announcements collection"
     },
     "/resources/{resourceId}": {
       "schema": "Resource",
-      "description": "Study materials uploaded by admins."
+      "description": "Resources collection"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages collection"
+    },
+    "/homework/{homeworkId}": {
+      "schema": "Homework",
+      "description": "Homework collection"
+    },
+    "/progress/{progressId}": {
+      "schema": "Progress",
+      "description": "Progress collection"
     }
   }
 }

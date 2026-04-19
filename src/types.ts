@@ -12,6 +12,7 @@ export type StudentLevel =
 export interface UserProfile {
   id: string;
   name: string;
+  class: string;
   grade: string; // Keep for backward compatibility or use level
   level: StudentLevel;
   languagePreference: Language;
@@ -19,8 +20,24 @@ export interface UserProfile {
   selectedSubjects: Subject[];
   studyStreak: number;
   lastActive: string;
-  role?: 'student' | 'admin';
+  role: 'student' | 'staff' | 'admin';
   tutorStyle?: string;
+  chatbotName?: string;
+}
+
+export interface Homework {
+  id: string;
+  title: string;
+  description: string;
+  subject: Subject;
+  level: StudentLevel;
+  examBoard: ExamBoard;
+  dueDate: string;
+  content?: string;
+  imageUrl?: string;
+  authorId: string;
+  authorName: string;
+  timestamp: number;
 }
 
 export interface ChatMessage {
@@ -30,6 +47,12 @@ export interface ChatMessage {
   timestamp: number;
   subject?: Subject;
   uid: string;
+  imageUrl?: string;
+  assessmentSuggestion?: {
+    type: 'quiz' | 'exam';
+    subject: Subject;
+    topic?: string;
+  };
 }
 
 export interface ProgressRecord {
@@ -39,6 +62,7 @@ export interface ProgressRecord {
   weaknessLevel: 'low' | 'medium' | 'high';
   lastAttempt: string;
   uid: string;
+  type?: 'quiz' | 'test' | 'study';
 }
 
 export interface Announcement {
@@ -65,4 +89,6 @@ export interface QuizQuestion {
   options: string[];
   correctAnswer: number;
   explanation: string;
+  imageUrl?: string;
+  diagramPrompt?: string;
 }

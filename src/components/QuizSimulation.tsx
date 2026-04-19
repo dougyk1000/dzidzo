@@ -1,19 +1,23 @@
-import { useState } from 'react';
-import { QuizQuestion, Subject, ExamBoard, Language } from '../types';
-import { generateQuizQuestions } from '../services/geminiService';
-import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage } from '../types';
+import { generateQuizQuestions, generateDiagram } from '../services/geminiService';
+import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, BookOpen } from 'lucide-react';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface QuizSimulationProps {
-  subject: Subject;
   board: ExamBoard;
   level: string;
   language: Language;
-  onComplete: (score: number) => void;
+  availableSubjects: Subject[];
+  chatHistory: ChatMessage[];
+  onComplete: (score: number, subject: Subject) => void;
+  autoStartSubject?: Subject;
+  autoStartTopic?: string;
 }
 
-export function QuizSimulation({ subject, board, level, language, onComplete }: QuizSimulationProps) {
+export function QuizSimulation({ board, level, language, availableSubjects, chatHistory, onComplete, autoStartSubject, autoStartTopic }: QuizSimulationProps) {
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(autoStartSubject || null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -21,10 +25,51 @@ export function QuizSimulation({ subject, board, level, language, onComplete }: 
   const [score, setScore] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [topic, setTopic] = useState(autoStartTopic || '');
+  const [isImageLoading, setIsImageLoading] = useState(false);
 
-  const startQuiz = async () => {
+  // Load image if diagramPrompt exists
+  useEffect(() => {
+    async function fetchImage() {
+      const currentQ = questions[currentIndex];
+      if (currentQ && currentQ.diagramPrompt && !currentQ.imageUrl && !isImageLoading) {
+        setIsImageLoading(true);
+        try {
+          const url = await generateDiagram(currentQ.diagramPrompt);
+          setQuestions(prev => {
+            const next = [...prev];
+            next[currentIndex] = { ...next[currentIndex], imageUrl: url };
+            return next;
+          });
+        } catch (error) {
+          console.error("Failed to load question diagram", error);
+        } finally {
+          setIsImageLoading(false);
+        }
+      }
+    }
+    fetchImage();
+  }, [currentIndex, questions]);
+
+  // Auto-start if initial props are provided
+  useEffect(() => {
+    if (autoStartSubject && questions.length === 0 && !isLoading) {
+      startQuiz(autoStartSubject, autoStartTopic);
+    }
+  }, [autoStartSubject, autoStartTopic]);
+
+  const startQuiz = async (subject: Subject, customTopic?: string) => {
     setIsLoading(true);
-    const q = await generateQuizQuestions(subject, board, level, language);
+    setSelectedSubject(subject);
+    if (customTopic) setTopic(customTopic);
+
+    // Format history for Gemini
+    const history = chatHistory.slice(-10).map(m => ({
+      role: m.role === 'user' ? 'user' as const : 'model' as const,
+      parts: [{ text: m.content }]
+    }));
+
+    const q = await generateQuizQuestions(subject, board, level, language, history, customTopic || topic);
     setQuestions(q);
     setIsLoading(false);
     setCurrentIndex(0);
@@ -49,35 +94,52 @@ export function QuizSimulation({ subject, board, level, language, onComplete }: 
       setIsAnswered(false);
     } else {
       setIsFinished(true);
-      onComplete((score / questions.length) * 100);
+      if (selectedSubject) {
+        onComplete((score / questions.length) * 100, selectedSubject);
+      }
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4 transition-colors duration-300">
-        <Loader2 className="animate-spin text-blue-600" size={48} />
-        <p className="text-slate-500 dark:text-slate-400 font-medium">Generating {board} {subject} questions...</p>
-      </div>
-    );
-  }
+  if (!selectedSubject || questions.length === 0) {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center h-96 space-y-4 transition-colors duration-300">
+          <Loader2 className="animate-spin text-blue-600" size={48} />
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Generating {board} questions...</p>
+        </div>
+      );
+    }
 
-  if (questions.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-900 p-12 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 text-center space-y-6 shadow-sm">
-        <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-3xl flex items-center justify-center mx-auto">
+      <div className="bg-white dark:bg-slate-900 p-8 md:p-12 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+          <img src="https://picsum.photos/seed/quiz-start/400/400" alt="quiz" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        </div>
+        <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-3xl flex items-center justify-center mx-auto relative z-10 mb-8">
           <RefreshCw size={40} />
         </div>
-        <h3 className="text-2xl font-bold dark:text-white">Ready for a Quiz?</h3>
-        <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-          We'll generate 5 random questions based on the {board} syllabus for {subject}.
-        </p>
-        <button 
-          onClick={startQuiz}
-          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-        >
-          Start Simulation
-        </button>
+        
+        <div className="relative z-10 text-center space-y-4 max-w-xl mx-auto mb-12">
+          <h3 className="text-3xl font-bold dark:text-white">Ready for a Quiz?</h3>
+          <p className="text-slate-500 dark:text-slate-400">
+            Choose a subject to generate 5 random questions based on the {board} syllabus.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
+          {availableSubjects.map(s => (
+            <button
+              key={s}
+              onClick={() => startQuiz(s)}
+              className="p-6 rounded-3xl border-2 border-slate-100 dark:border-slate-800 hover:border-blue-600 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all text-center group"
+            >
+              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 transition-colors">
+                <BookOpen size={24} />
+              </div>
+              <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">{s}</span>
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -93,7 +155,7 @@ export function QuizSimulation({ subject, board, level, language, onComplete }: 
         </p>
         <div className="flex gap-4 justify-center">
           <button 
-            onClick={startQuiz}
+            onClick={() => selectedSubject && startQuiz(selectedSubject)}
             className="bg-slate-900 dark:bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-blue-700"
           >
             Try Again
@@ -126,6 +188,23 @@ export function QuizSimulation({ subject, board, level, language, onComplete }: 
       </div>
 
       <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm space-y-8">
+        {currentQ.imageUrl ? (
+          <div className="mb-6 rounded-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800 max-h-80">
+            <img 
+              src={currentQ.imageUrl} 
+              alt="Quiz diagram" 
+              className="w-full h-full object-contain bg-white"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        ) : currentQ.diagramPrompt && (
+          <div className="mb-6 rounded-3xl h-48 border-2 border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex flex-col items-center gap-3 text-slate-400">
+              <Loader2 className="animate-spin" size={24} />
+              <p className="text-xs font-medium">Generating diagram...</p>
+            </div>
+          </div>
+        )}
         <h3 className="text-xl font-bold leading-relaxed dark:text-white">{currentQ.question}</h3>
         
         <div className="grid grid-cols-1 gap-3">

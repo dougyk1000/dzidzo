@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Image as ImageIcon, Loader2, User, Bot, Volume2, VolumeX } from 'lucide-react';
+import { Send, Image as ImageIcon, Loader2, User, Bot, Volume2, VolumeX, Sparkles, ClipboardCheck, ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { ChatMessage, Language, Subject } from '../types';
+import { ChatMessage, Language, Subject, Homework } from '../types';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -13,10 +13,12 @@ interface ChatBoxProps {
   onUploadImage: (base64: string) => void;
   isLoading: boolean;
   language: Language;
-  subject: Subject;
   onSpeak?: (text: string) => void;
   onStopSpeaking?: () => void;
   isSpeaking?: boolean;
+  homeworkList?: Homework[];
+  chatbotName?: string;
+  onStartAssessment?: (type: 'quiz' | 'exam', subject: string, topic?: string) => void;
 }
 
 export function ChatBox({ 
@@ -25,10 +27,11 @@ export function ChatBox({
   onUploadImage, 
   isLoading, 
   language, 
-  subject,
   onSpeak,
   onStopSpeaking,
-  isSpeaking
+  isSpeaking,
+  chatbotName = 'Dzidzo',
+  onStartAssessment
 }: ChatBoxProps) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -75,7 +78,7 @@ export function ChatBox({
               className="relative"
             >
               <img 
-                src={`https://picsum.photos/seed/dzidzo-learning-${subject.toLowerCase()}/400/300`} 
+                src="https://picsum.photos/seed/dzidzo-learning/400/300" 
                 alt="Learning" 
                 className="w-64 h-48 rounded-3xl object-cover shadow-2xl border-4 border-white dark:border-slate-800"
                 referrerPolicy="no-referrer"
@@ -85,9 +88,9 @@ export function ChatBox({
               </div>
             </motion.div>
             <div className="max-w-xs space-y-2">
-              <h3 className="text-xl font-bold dark:text-white">Ready to learn {subject}?</h3>
+              <h3 className="text-xl font-bold dark:text-white">Ready to study?</h3>
               <p className="text-slate-600 dark:text-slate-400 text-sm">
-                Mhoro! I'm Dzidzo, your {subject} tutor. 
+                Mhoro! I'm {chatbotName}, your exam tutor. 
                 Ask me any question or upload a past paper photo.
               </p>
             </div>
@@ -118,6 +121,16 @@ export function ChatBox({
                   ? "bg-blue-600 dark:bg-blue-700 text-white rounded-tr-none shadow-md" 
                   : "bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-700 rounded-tl-none shadow-sm"
               )}>
+                {msg.imageUrl && (
+                  <div className="mb-3 rounded-xl overflow-hidden border-2 border-white/20">
+                    <img 
+                      src={msg.imageUrl} 
+                      alt="Uploaded document" 
+                      className="max-w-full h-auto object-contain max-h-64"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
                 {msg.role === 'assistant' && onSpeak && (
                   <button
                     onClick={() => isSpeaking ? onStopSpeaking?.() : onSpeak(msg.content)}
@@ -135,6 +148,22 @@ export function ChatBox({
                     {msg.content}
                   </ReactMarkdown>
                 </div>
+                {msg.assessmentSuggestion && onStartAssessment && (
+                  <div className="mt-4 pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
+                    <p className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-2">
+                       <Sparkles size={14} className="text-emerald-500" />
+                       Ready for an assessment?
+                    </p>
+                    <button
+                      onClick={() => onStartAssessment(msg.assessmentSuggestion!.type, msg.assessmentSuggestion!.subject, msg.assessmentSuggestion!.topic)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95 group"
+                    >
+                      <ClipboardCheck size={18} className="group-hover:scale-110 transition-transform" />
+                      Take the {msg.assessmentSuggestion.type} now
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -150,7 +179,7 @@ export function ChatBox({
               <Loader2 size={16} className="animate-spin" />
             </div>
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 italic text-sm">
-              Dzidzo is thinking...
+              {chatbotName} is thinking...
             </div>
           </motion.div>
         )}
@@ -179,7 +208,7 @@ export function ChatBox({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={`Ask about ${subject}...`}
+            placeholder="Ask anything about your subjects..."
             className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 dark:text-slate-100"
           />
           

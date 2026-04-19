@@ -17,11 +17,15 @@ import { ALL_SUBJECTS as allSubjects } from '../constants';
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(1);
+  const [fullName, setFullName] = useState('');
+  const [className, setClassName] = useState('');
+  const [role, setRole] = useState<'student' | 'staff' | 'admin'>('student');
   const [board, setBoard] = useState<ExamBoard | null>(null);
   const [level, setLevel] = useState<StudentLevel | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<Subject[]>([]);
   const [subjectSearch, setSubjectSearch] = useState('');
   const [customSubjects, setCustomSubjects] = useState<Subject[]>([]);
+  const [chatbotName, setChatbotName] = useState('DzidzoBot');
 
   const toggleSubject = (s: Subject) => {
     setSelectedSubjects(prev => 
@@ -44,16 +48,107 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 transition-all duration-300">
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] max-w-lg w-full p-8 shadow-2xl space-y-8 border border-slate-200 dark:border-slate-800 transition-colors duration-300">
-        <div className="flex items-center gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] max-w-lg w-full p-8 shadow-2xl space-y-8 border border-slate-200 dark:border-slate-800 transition-colors duration-300 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-full h-full opacity-5 pointer-events-none">
+          <img src={`https://picsum.photos/seed/onboarding-step-${step}/800/800`} alt="bg" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        </div>
+        <div className="flex items-center gap-3 relative z-10">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
             <GraduationCap size={24} />
           </div>
-          <h2 className="text-2xl font-bold dark:text-white tracking-tight">Welcome to Dzidzo</h2>
+          <h2 className="text-2xl font-bold dark:text-white tracking-tight">Welcome to Marchwood</h2>
         </div>
 
         {step === 1 && (
-          <div className="space-y-6">
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Tell us about yourself</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Please provide your basic details.</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Class / Grade</label>
+                <input
+                  type="text"
+                  value={className}
+                  onChange={(e) => setClassName(e.target.value)}
+                  placeholder="e.g. 4A or Grade 10"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <button
+              disabled={!fullName || !className}
+              onClick={() => setStep(2)}
+              className="w-full bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+            >
+              Next Step
+            </button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Who are you?</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Select your role in the school.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {[
+                { id: 'student', label: 'Student', desc: 'I want to learn and do homework.' },
+                { id: 'staff', label: 'Staff / Teacher', desc: 'I want to manage homework and students.' },
+                { id: 'admin', label: 'Administrator', desc: 'I want to manage the entire school system.' }
+              ].map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => setRole(r.id as any)}
+                  className={cn(
+                    "p-4 rounded-2xl border-2 transition-all text-left flex items-center justify-between group",
+                    role === r.id 
+                      ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20" 
+                      : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700"
+                  )}
+                >
+                  <div>
+                    <span className={cn(
+                      "text-lg font-bold block",
+                      role === r.id ? "text-blue-600 dark:text-blue-400" : "text-slate-900 dark:text-white"
+                    )}>{r.label}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{r.desc}</span>
+                  </div>
+                  {role === r.id && <Check className="text-blue-600 dark:text-blue-400" size={20} />}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold"
+              >
+                Next Step
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6 relative z-10">
             <div>
               <h3 className="text-lg font-bold dark:text-white">Which examination board are you under?</h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm">We'll tailor your experience based on your board.</p>
@@ -74,18 +169,26 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 </button>
               ))}
             </div>
-            <button
-              disabled={!board}
-              onClick={() => setStep(2)}
-              className="w-full bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
-            >
-              Next Step
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                disabled={!board}
+                onClick={() => setStep(4)}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+              >
+                Next Step
+              </button>
+            </div>
           </div>
         )}
 
-        {step === 2 && (
-          <div className="space-y-6">
+        {step === 4 && (
+          <div className="space-y-6 relative z-10">
             <div>
               <h3 className="text-lg font-bold dark:text-white">What is your current level?</h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm">This helps us provide grade-appropriate content.</p>
@@ -108,14 +211,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             </div>
             <div className="flex gap-4">
               <button
-                onClick={() => setStep(1)}
+                onClick={() => setStep(3)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
               >
                 Back
               </button>
               <button
                 disabled={!level}
-                onClick={() => setStep(3)}
+                onClick={() => setStep(5)}
                 className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
               >
                 Next Step
@@ -124,8 +227,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        {step === 3 && (
-          <div className="space-y-6">
+        {step === 5 && (
+          <div className="space-y-6 relative z-10">
             <div>
               <h3 className="text-lg font-bold dark:text-white">Select your subjects</h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm">Choose the subjects you are currently studying.</p>
@@ -170,14 +273,59 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             </div>
             <div className="flex gap-4">
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(4)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
               >
                 Back
               </button>
               <button
                 disabled={selectedSubjects.length === 0}
-                onClick={() => onComplete({ examBoard: board!, selectedSubjects, level: level!, grade: level! })}
+                onClick={() => setStep(6)}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+              >
+                Next Step
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 6 && (
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Name your AI Tutor</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Give your chatbot a name that you'll remember.</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Chatbot Name</label>
+                <input
+                  type="text"
+                  value={chatbotName}
+                  onChange={(e) => setChatbotName(e.target.value)}
+                  placeholder="e.g. DzidzoBot"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(5)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                disabled={!chatbotName}
+                onClick={() => onComplete({ 
+                  name: fullName, 
+                  class: className, 
+                  role, 
+                  examBoard: board!, 
+                  selectedSubjects, 
+                  level: level!, 
+                  grade: level!,
+                  chatbotName
+                })}
                 className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
               >
                 Start Learning
