@@ -17,6 +17,12 @@ const SYSTEM_INSTRUCTIONS = (
 You are ${chatbotName}, an expert ${board} tutor for ${level} students at Marchwood Senior School.
 Your goal is to help students learn these subjects: ${subjects.join(', ')} step-by-step at a ${level} level.
 
+DIAGRAM GENERATION RULES (CRITICAL):
+- ONLY call 'generate_diagram' if a visual is ABSOLUTELY ESSENTIAL for understanding (e.g., biological structures, complex circuit diagrams, geometric proofs).
+- DO NOT generate diagrams for simple concepts that can be explained with text or LaTeX.
+- Avoid unnecessary "decorative" diagrams.
+- When generating, provide a highly descriptive prompt to ensure technical and scientific accuracy.
+
 CREATOR INFORMATION:
 - Dzidzo was created by KLabs, an educational technology organisation.
 - Website: https://klabstudio.vercel.app/
@@ -30,6 +36,12 @@ SCHOOL: Marchwood Senior School
 
 STUDENT PROGRESS & STATS:
 ${progress.length > 0 ? progress.map(p => `- Subject: ${p.subject}, Topic: ${p.topic}, Score: ${p.score}%, Level: ${p.weaknessLevel}, Last Attempt: ${p.lastAttempt}`).join('\n') : 'No progress recorded yet. Start fresh!'}
+
+RESOURCE ACCESS:
+- You have full access to study resources.
+- Some are TEXT (in "RELEVANT RESOURCES"), some are PDF/IMAGE files (multimodal parts).
+- Analyze these files specifically when the student asks for resource-based help.
+- Ensure scientific and mathematical accuracy based on the provided documents.
 
 LANGUAGE RULES:
 - Current Language Mode: ${language}
@@ -111,13 +123,13 @@ const startAssessmentTool: FunctionDeclaration = {
 
 const generateDiagramTool: FunctionDeclaration = {
   name: "generate_diagram",
-  description: "Generate a visual diagram, illustration, or scientific sketch to help the student visualize a concept.",
+  description: "Generate a technical educational diagram or scientific illustration ONLY when strictly necessary for clarifying complex academic concepts (e.g., cell anatomy, circuit logic, geometry).",
   parameters: {
     type: Type.OBJECT,
     properties: {
       prompt: {
         type: Type.STRING,
-        description: "A detailed description of the diagram needed. For example: 'A labeled diagram of a human heart showing all chambers and valves' or 'A circuit diagram with a battery, resistor, and switch'."
+        description: "A highly specific, technically accurate description of the academic diagram. Include all necessary scientific components."
       },
       labelItems: {
         type: Type.ARRAY,
@@ -156,8 +168,30 @@ export async function getTutorResponse(
     const model = "gemini-3-flash-preview";
     
     // Build context from resources
-    const resourceContext = contextResources.length > 0 
-      ? `\n\nRELEVANT RESOURCES FOR YOUR SUBJECTS:\n${contextResources.map(r => `- ${r.subject} - ${r.title}: ${r.description}`).join('\n')}`
+    const docParts: any[] = [];
+    const resourceTextLines: string[] = [];
+
+    contextResources.forEach(r => {
+      resourceTextLines.push(`- [${r.type}] ${r.subject} - ${r.title}: ${r.description}`);
+      if (r.content) {
+        resourceTextLines.push(`  CONTENT: ${r.content}`);
+      }
+      
+      if (r.url.startsWith('data:')) {
+        try {
+          const [mimePart, dataPart] = r.url.split(';base64,');
+          const mimeType = mimePart.split(':')[1];
+          if (mimeType.includes('pdf') || mimeType.includes('image')) {
+            docParts.push({ inlineData: { data: dataPart, mimeType: mimeType } });
+          }
+        } catch (e) {
+          console.warn("Failed to parse resource URL for AI:", r.title);
+        }
+      }
+    });
+
+    const resourceContext = resourceTextLines.length > 0 
+      ? `\n\nRELEVANT RESOURCES FOR YOUR SUBJECTS:\n${resourceTextLines.join('\n')}`
       : "";
 
     // Build homework context
@@ -173,8 +207,14 @@ export async function getTutorResponse(
     const response: GenerateContentResponse = await ai.models.generateContent({
       model,
       contents: [
-        ...history, // Pass entire history to the AI
-        { role: 'user', parts: [{ text: message + resourceContext }] }
+        ...history,
+        { 
+          role: 'user', 
+          parts: [
+            { text: message + resourceContext },
+            ...docParts
+          ] 
+        }
       ],
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS(language, subjects, board, level, style, homeworkContext, chatbotName, studentName, progress),
@@ -427,9 +467,22 @@ export async function generateQuizQuestions(
 
 export async function generateDiagram(prompt: string, subject?: string, difficulty?: string, labels?: string[]): Promise<string> {
   try {
-    const labelPrompt = labels && labels.length > 0 ? ` Please clearly label: ${labels.join(', ')}.` : '';
+    const labelPrompt = labels && labels.length > 0 ? ` Please clearly with correct annotations: ${labels.join(', ')}.` : '';
     const contextPrompt = (subject || difficulty) ? ` (Subject: ${subject || ''}, Difficulty: ${difficulty || ''})` : '';
-    const finalPrompt = `A pedagogical, high-quality, clear educational diagram or scientific illustration of: ${prompt}.${labelPrompt}${contextPrompt} Use a clean, educational style suitable for a school textbook. Black and white or simple colors. No unnecessary backgrounds.`;
+    
+    // Improved prompt for accuracy
+    const finalPrompt = `Professional pedagogical educational diagram for a ${subject || ''} textbook.
+    TOPIC: ${prompt}
+    ${labelPrompt}
+    ${contextPrompt}
+    
+    STYLE REQUIREMENTS:
+    - High accuracy, scientific precision.
+    - Clean white background, no gradients.
+    - Clear, legible labels and lines.
+    - Minimalist, professional educational illustration style.
+    - No photographic elements, use vector-style or architectural sketching style.
+    - Mathematical symbols must be correctly rendered.`;
     
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',

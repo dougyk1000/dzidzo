@@ -83,6 +83,7 @@ export interface Resource {
   title: string;
   description: string;
   url: string;
+  content?: string; // For text-based notes or extracted text
   subject: Subject;
   examBoard: ExamBoard;
   type: 'PDF' | 'Link' | 'Note';

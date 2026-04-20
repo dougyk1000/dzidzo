@@ -398,7 +398,7 @@ function DzidzoApp() {
     
     // Determine role: hardcoded admin check OR selected role
     let finalRole: 'student' | 'staff' | 'admin' = data.role || 'student';
-    if (user.email === 'douglasnkowo3036@gmail.com') {
+    if (user.email === 'douglasnkowo0145@gmail.com') {
       finalRole = 'admin';
     }
 
@@ -413,7 +413,9 @@ function DzidzoApp() {
       selectedSubjects: data.selectedSubjects!,
       studyStreak: 1,
       lastActive: new Date().toISOString(),
-      role: finalRole
+      role: finalRole,
+      status: finalRole === 'student' ? 'approved' : (data.status || 'pending'),
+      chatbotName: data.chatbotName || 'Dzidzo'
     };
     
     try {
@@ -774,8 +776,8 @@ function DzidzoApp() {
     );
   }
 
-  const isAdmin = user?.email === 'douglasnkowo3036@gmail.com' || profile?.role === 'admin';
-  const isStaff = profile?.role === 'staff' || isAdmin;
+  const isAdmin = user?.email === 'douglasnkowo0145@gmail.com' || profile?.role === 'admin';
+  const isStaff = (profile?.role === 'staff' || isAdmin) && profile?.status === 'approved';
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');

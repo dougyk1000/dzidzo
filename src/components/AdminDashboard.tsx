@@ -22,6 +22,7 @@ export function AdminDashboard() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [pendingTeachers, setPendingTeachers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [filterBoard, setFilterBoard] = useState<ExamBoard | 'All'>('All');
 
   // Form states
   const [annTitle, setAnnTitle] = useState('');
@@ -34,6 +35,7 @@ export function AdminDashboard() {
   const [resSubject, setResSubject] = useState<Subject>('Maths');
   const [resBoard, setResBoard] = useState<ExamBoard>('ZIMSEC');
   const [resType, setResType] = useState<'PDF' | 'Link' | 'Note'>('Link');
+  const [resContent, setResContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
   // Quiz Gen states
@@ -53,13 +55,12 @@ export function AdminDashboard() {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'resources'));
 
-    // Fetch pending teachers
-    const teacherQuery = query(
+    // Fetch pending accounts
+    const pendingQuery = query(
       collection(db, 'users'), 
-      where('role', '==', 'staff'),
       where('status', '==', 'pending')
     );
-    const unsubTeachers = onSnapshot(teacherQuery, (snapshot) => {
+    const unsubTeachers = onSnapshot(pendingQuery, (snapshot) => {
       setPendingTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
@@ -98,6 +99,7 @@ export function AdminDashboard() {
         title: resTitle,
         description: resDesc,
         url: resUrl,
+        content: resContent,
         subject: resSubject,
         examBoard: resBoard,
         type: resType,
@@ -106,6 +108,7 @@ export function AdminDashboard() {
       setResTitle('');
       setResDesc('');
       setResUrl('');
+      setResContent('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'resources');
     }
@@ -246,34 +249,44 @@ export function AdminDashboard() {
           <h2 className="text-2xl font-bold">Teacher Approvals</h2>
           {pendingTeachers.length > 0 && (
             <span className="bg-amber-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
-              {pendingTeachers.length} Pending
+              {pendingTeachers.length} New Requests
             </span>
           )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {pendingTeachers.map(teacher => (
-            <div key={teacher.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group">
+          {pendingTeachers.map(account => (
+            <div key={account.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-500 font-bold text-xl uppercase">
-                  {teacher.name.charAt(0)}
+                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-500 font-bold text-xl uppercase relative">
+                  {account.name.charAt(0)}
+                  <span className={cn(
+                    "absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900",
+                    account.role === 'admin' ? "bg-rose-500" : "bg-amber-500"
+                  )} />
                 </div>
                 <div>
-                  <h3 className="font-bold dark:text-white">{teacher.name}</h3>
-                  <p className="text-xs text-slate-500">{teacher.class} • {teacher.examBoard}</p>
-                  <p className="text-[10px] text-blue-500 font-mono mt-1">{teacher.selectedSubjects.join(', ')}</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold dark:text-white">{account.name}</h3>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase",
+                      account.role === 'admin' ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-600"
+                    )}>{account.role}</span>
+                  </div>
+                  <p className="text-xs text-slate-500">{account.class} • {account.examBoard}</p>
+                  <p className="text-[10px] text-blue-500 font-mono mt-1">{account.selectedSubjects.join(', ')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => handleApproveTeacher(teacher.id, true)}
+                  onClick={() => handleApproveTeacher(account.id, true)}
                   className="p-2 bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all"
                   title="Approve"
                 >
                   <Check size={20} />
                 </button>
                 <button 
-                  onClick={() => handleApproveTeacher(teacher.id, false)}
+                  onClick={() => handleApproveTeacher(account.id, false)}
                   className="p-2 bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-all"
                   title="Reject"
                 >
@@ -284,7 +297,7 @@ export function AdminDashboard() {
           ))}
           {pendingTeachers.length === 0 && (
             <div className="col-span-full py-12 text-center bg-slate-50 dark:bg-slate-950/50 rounded-3xl border-2 border-dashed border-slate-100 dark:border-slate-800">
-              <p className="text-slate-400 italic">No pending teacher signups to review.</p>
+              <p className="text-slate-400 italic">No pending signup requests to review.</p>
             </div>
           )}
         </div>
@@ -359,7 +372,21 @@ export function AdminDashboard() {
             <h2 className="text-2xl font-bold dark:text-slate-100">Manage Study Resources</h2>
           </div>
           
-          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-bold text-slate-500 ml-2 uppercase tracking-tight">Filter:</span>
+              <select 
+                value={filterBoard} 
+                onChange={(e) => setFilterBoard(e.target.value as any)}
+                className="bg-transparent border-none text-sm font-bold focus:ring-0 cursor-pointer dark:text-slate-100"
+              >
+                <option value="All">All Boards</option>
+                <option value="ZIMSEC">ZIMSEC</option>
+                <option value="Cambridge">Cambridge</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
             <Sparkles className="text-indigo-600" size={18} />
             <input 
               type="text" 
@@ -377,6 +404,7 @@ export function AdminDashboard() {
             </button>
           </div>
         </div>
+      </div>
 
         <form onSubmit={handleAddResource} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-4">
@@ -423,6 +451,16 @@ export function AdminDashboard() {
             <select value={resType} onChange={(e) => setResType(e.target.value as any)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 dark:text-slate-100">
               {['PDF', 'Link', 'Note'].map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            
+            {resType === 'Note' && (
+              <textarea
+                placeholder="Write your note content here..."
+                value={resContent}
+                onChange={(e) => setResContent(e.target.value)}
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 h-32 dark:text-slate-100"
+                required
+              />
+            )}
           </div>
           <button
             disabled={isLoading}
@@ -434,7 +472,9 @@ export function AdminDashboard() {
         </form>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {resources.map(res => (
+          {resources
+            .filter(r => filterBoard === 'All' || r.examBoard === filterBoard)
+            .map(res => (
             <div key={res.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex justify-between items-start">
                 <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">
@@ -446,6 +486,11 @@ export function AdminDashboard() {
               </div>
               <h3 className="font-bold text-sm dark:text-slate-100">{res.title}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">{res.subject} • {res.examBoard}</p>
+              {res.content && (
+                <p className="text-[10px] text-slate-400 line-clamp-2 italic border-l-2 border-slate-200 pl-2">
+                  {res.content}
+                </p>
+              )}
             </div>
           ))}
         </div>
