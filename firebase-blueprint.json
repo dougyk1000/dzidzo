@@ -8,18 +8,21 @@
         "id": { "type": "string" },
         "email": { "type": "string" },
         "name": { "type": "string" },
-        "fullName": { "type": "string" },
-        "role": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "staff", "admin"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "class": { "type": "string" },
         "level": { "type": "string" },
-        "syllabus": { "type": "string" },
-        "subjects": { "type": "array", "items": { "type": "string" } },
+        "grade": { "type": "string" },
+        "examBoard": { "type": "string" },
+        "selectedSubjects": { "type": "array", "items": { "type": "string" } },
+        "languagePreference": { "type": "string" },
         "chatbotName": { "type": "string" },
-        "bookmarkedResourceIds": { "type": "array", "items": { "type": "string" } },
-        "onboardingComplete": { "type": "boolean" },
-        "createdAt": { "type": "number" }
+        "tutorStyle": { "type": "string" },
+        "studyStreak": { "type": "number" },
+        "lastActive": { "type": "string" },
+        "bookmarkedResourceIds": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "email", "name", "role", "onboardingComplete"]
+      "required": ["id", "name", "role"]
     },
     "Announcement": {
       "title": "Announcement",

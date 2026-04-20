@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "katex/dist/katex.min.css";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;

@@ -7,6 +7,8 @@ import { ChatMessage, Language, Subject, Homework } from '../types';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { translations } from '../translations';
+
 interface ChatBoxProps {
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
@@ -42,6 +44,8 @@ export function ChatBox({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const t = translations[language];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,10 +92,9 @@ export function ChatBox({
               </div>
             </motion.div>
             <div className="max-w-xs space-y-2">
-              <h3 className="text-xl font-bold dark:text-white">Ready to study?</h3>
+              <h3 className="text-xl font-bold dark:text-white">{t.readyToStudy}</h3>
               <p className="text-slate-600 dark:text-slate-400 text-sm">
-                Mhoro! I'm {chatbotName}, your exam tutor. 
-                Ask me any question or upload a past paper photo.
+                {t.tutorIntro.replace('{name}', chatbotName)}
               </p>
             </div>
           </div>
@@ -152,14 +155,14 @@ export function ChatBox({
                   <div className="mt-4 pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
                     <p className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-2">
                        <Sparkles size={14} className="text-emerald-500" />
-                       Ready for an assessment?
+                       {t.assessmentSuggestion}
                     </p>
                     <button
                       onClick={() => onStartAssessment(msg.assessmentSuggestion!.type, msg.assessmentSuggestion!.subject, msg.assessmentSuggestion!.topic)}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95 group"
                     >
                       <ClipboardCheck size={18} className="group-hover:scale-110 transition-transform" />
-                      Take the {msg.assessmentSuggestion.type} now
+                      {t.takeAssessment.replace('{type}', msg.assessmentSuggestion.type)}
                       <ArrowRight size={18} />
                     </button>
                   </div>
@@ -179,7 +182,7 @@ export function ChatBox({
               <Loader2 size={16} className="animate-spin" />
             </div>
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 italic text-sm">
-              {chatbotName} is thinking...
+              {t.thinking.replace('{name}', chatbotName)}
             </div>
           </motion.div>
         )}
@@ -187,7 +190,7 @@ export function ChatBox({
 
       {/* Input Area */}
       <form onSubmit={handleSubmit} className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+        <div className="flex items-center gap-2">
           <input
             type="file"
             ref={fileInputRef}
@@ -198,32 +201,34 @@ export function ChatBox({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-            title="Upload past paper image"
+            className="p-3 text-blue-600 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-blue-50 dark:hover:bg-blue-900/20 shadow-sm transition-all active:scale-95 shrink-0"
+            title="Upload image or past paper"
           >
-            <ImageIcon size={20} />
+            <ImageIcon size={22} />
           </button>
           
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask anything about your subjects..."
-            className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 dark:text-slate-100"
-          />
-          
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className={cn(
-              "p-2 rounded-xl transition-all",
-              input.trim() && !isLoading 
-                ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 active:scale-95" 
-                : "text-slate-300"
-            )}
-          >
-            <Send size={20} />
-          </button>
+          <div className="flex-1 flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t.askAnything}
+              className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 dark:text-slate-100"
+            />
+            
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className={cn(
+                "p-2 rounded-xl transition-all",
+                input.trim() && !isLoading 
+                  ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 active:scale-95" 
+                  : "text-slate-300"
+              )}
+            >
+              <Send size={20} />
+            </button>
+          </div>
         </div>
       </form>
     </div>

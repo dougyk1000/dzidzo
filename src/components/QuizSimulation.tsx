@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { QuizQuestion, Subject, ExamBoard, Language, ChatMessage, Difficulty } from '../types';
 import { generateQuizQuestions, generateDiagram } from '../services/geminiService';
-import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, BookOpen, BarChart } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, BookOpen, BarChart, Settings2 } from 'lucide-react';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 interface QuizSimulationProps {
   board: ExamBoard;
@@ -27,6 +30,7 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
   const [isLoading, setIsLoading] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [topic, setTopic] = useState(autoStartTopic || '');
+  const [questionCount, setQuestionCount] = useState(5);
   const [isImageLoading, setIsImageLoading] = useState(false);
 
   // Load image if diagramPrompt exists
@@ -65,13 +69,13 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
     if (customTopic) setTopic(customTopic);
     const finalDiff = customDifficulty || difficulty;
 
-    // Format history for Gemini
-    const history = chatHistory.slice(-10).map(m => ({
+    // Format full history for Gemini (removed truncation)
+    const history = chatHistory.map(m => ({
       role: m.role === 'user' ? 'user' as const : 'model' as const,
       parts: [{ text: m.content }]
     }));
 
-    const q = await generateQuizQuestions(subject, board, level, language, history, customTopic || topic, 5, finalDiff);
+    const q = await generateQuizQuestions(subject, board, level, language, history, customTopic || topic, questionCount, finalDiff);
     setQuestions(q);
     setIsLoading(false);
     setCurrentIndex(0);
@@ -128,7 +132,7 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
           </p>
         </div>
 
-        <div className="flex justify-center gap-3 mb-10 relative z-20">
+        <div className="flex flex-wrap justify-center gap-3 mb-6 relative z-20">
           {(['Easy', 'Medium', 'Hard'] as Difficulty[]).map((d) => (
             <button
               key={d}
@@ -144,6 +148,33 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
               {d}
             </button>
           ))}
+          
+          <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700">
+            <Settings2 size={16} className="text-slate-400" />
+            <select 
+              value={questionCount}
+              onChange={(e) => setQuestionCount(Number(e.target.value))}
+              className="bg-transparent border-none text-sm font-bold text-slate-600 dark:text-slate-300 focus:ring-0 outline-none cursor-pointer"
+            >
+              <option value={3} className="bg-white dark:bg-slate-900">3 Questions</option>
+              <option value={5} className="bg-white dark:bg-slate-900">5 Questions</option>
+              <option value={10} className="bg-white dark:bg-slate-900">10 Questions</option>
+              <option value={20} className="bg-white dark:bg-slate-900">20 Questions</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="max-w-md mx-auto mb-10 relative z-20">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Specify Topic (Optional)</label>
+          <div className="relative">
+            <input 
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="e.g. Algebra, Photosynthesis, WW2..."
+              className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 bg-white dark:bg-slate-900 outline-none transition-all dark:text-white"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
@@ -225,7 +256,11 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
             </div>
           </div>
         )}
-        <h3 className="text-xl font-bold leading-relaxed dark:text-white">{currentQ.question}</h3>
+        <div className="text-xl font-bold leading-relaxed dark:text-white prose dark:prose-invert max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {currentQ.question}
+          </ReactMarkdown>
+        </div>
         
         <div className="grid grid-cols-1 gap-3">
           {currentQ.options.map((opt, i) => {
@@ -245,7 +280,11 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
                   isAnswered && !isSelected && !isCorrect && "border-slate-100 dark:border-slate-800 opacity-50 dark:text-slate-500"
                 )}
               >
-                <span className="font-medium">{opt}</span>
+                <div className="font-medium prose dark:prose-invert prose-sm">
+                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {opt}
+                  </ReactMarkdown>
+                </div>
                 {isAnswered && isCorrect && <CheckCircle2 size={20} />}
                 {isAnswered && isSelected && !isCorrect && <XCircle size={20} />}
               </button>
@@ -261,7 +300,11 @@ export function QuizSimulation({ board, level, language, availableSubjects, chat
               className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl space-y-2"
             >
               <p className="text-sm font-bold text-slate-900 dark:text-white">Explanation:</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{currentQ.explanation}</p>
+              <div className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed prose dark:prose-invert prose-sm">
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {currentQ.explanation}
+                </ReactMarkdown>
+              </div>
               <button 
                 onClick={nextQuestion}
                 className="mt-4 w-full bg-slate-900 dark:bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-blue-700"

@@ -17,6 +17,12 @@ const SYSTEM_INSTRUCTIONS = (
 You are ${chatbotName}, an expert ${board} tutor for ${level} students at Marchwood Senior School.
 Your goal is to help students learn these subjects: ${subjects.join(', ')} step-by-step at a ${level} level.
 
+CREATOR INFORMATION:
+- Dzidzo was created by KLabs, an educational technology organisation.
+- Website: https://klabstudio.vercel.app/
+- Author: Douglas Kowo (Founder of KLabs).
+- If a user asks who created you or who is the developer/author, provide this information proudly.
+
 STUDENT NAME: ${studentName || 'Student'}
 EXAM BOARD: ${board}
 STUDENT LEVEL: ${level}
@@ -67,6 +73,14 @@ OUTPUT FORMAT:
 1. Step-by-step solution
 2. Final answer (bolded)
 3. Short explanation/concept summary
+
+LATEX RULES (CRITICAL):
+- Use LaTeX for ALL mathematical formulas, scientific notations, and chemical equations.
+- Inline math MUST be wrapped in single dollar signs: $E=mc^2$.
+- Block math MUST be wrapped in double dollar signs: $$E=mc^2$$.
+- DO NOT use unicode symbols for exponents or subscripts; use LaTeX (e.g. x^2 instead of x²).
+- Ensure all chemical reactions use LaTeX (e.g. $CO_2$).
+
 4. ASSESSMENT TRIGGER: If the student asks for a "test", "quiz", "mock exam", or "assessment" on a topic you just discussed, you MUST call the "start_assessment" tool. Confirm to the student that you have prepared the test and that they can click the button below your message to begin.
 5. DIAGRAM TRIGGER: If a visual explanation (diagram, chart, or scientific illustration) would help the student understand a concept (e.g., the structure of a cell, a circuit diagram, or a geometry sketch), you MUST call the "generate_diagram" tool.
 `;
@@ -159,7 +173,7 @@ export async function getTutorResponse(
     const response: GenerateContentResponse = await ai.models.generateContent({
       model,
       contents: [
-        ...history,
+        ...history, // Pass entire history to the AI
         { role: 'user', parts: [{ text: message + resourceContext }] }
       ],
       config: {
@@ -353,6 +367,18 @@ export async function generateQuizQuestions(
 
     const prompt = `Generate ${count} multiple-choice questions for ${board} ${level} ${subject} in ${language}. 
       Each question must have 4 options, a correct answer index (0-3), and a brief explanation.
+      
+      CRITICAL: LATEX SUPPORT
+      - Use LaTeX for ALL mathematical formulas, scientific notations, and chemical equations.
+      - Inline math MUST be wrapped in: $formula$
+      - Block math MUST be wrapped in: $$formula$$
+      - Ensure standard notation for ${board} ${level}.
+      - IMPORTANT: DO NOT use \(\) or \[\] delimiters. ONLY use $ and $$.
+      
+      CRITICAL: RANDOMNESS
+      - DO NOT always place the correct answer in the same index (e.g. B or C). 
+      - Randomly shuffle the position of the correct answer (A, B, C, or D).
+      
       The difficulty should be ${difficulty}.
       
       VISUAL AIDS (CRITICAL):
@@ -391,7 +417,8 @@ export async function generateQuizQuestions(
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    const questions: QuizQuestion[] = JSON.parse(response.text || "[]");
+    return shuffleQuestions(questions);
   } catch (error) {
     console.error("Quiz Generation Error:", error);
     return [];
@@ -405,11 +432,10 @@ export async function generateDiagram(prompt: string, subject?: string, difficul
     const finalPrompt = `A pedagogical, high-quality, clear educational diagram or scientific illustration of: ${prompt}.${labelPrompt}${contextPrompt} Use a clean, educational style suitable for a school textbook. Black and white or simple colors. No unnecessary backgrounds.`;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
-      contents: [{
-        role: 'user',
+      model: 'gemini-2.5-flash-image',
+      contents: {
         parts: [{ text: finalPrompt }]
-      }],
+      },
       config: {
         imageConfig: {
           aspectRatio: "1:1"
@@ -417,11 +443,8 @@ export async function generateDiagram(prompt: string, subject?: string, difficul
       }
     });
 
-    const candidates = (response as any).candidates;
-    const parts = candidates?.[0]?.content?.parts;
-    
-    if (parts) {
-      for (const part of parts) {
+    if (response.candidates && response.candidates[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
           return `data:image/png;base64,${part.inlineData.data}`;
         }
@@ -460,6 +483,16 @@ export async function generateMockExam(
     DIFFICULTY LEVEL: ${difficulty}
     ${topicPrompt}
     ${contextPrompt}
+    
+    CRITICAL: LATEX SUPPORT
+    - Use LaTeX for ALL mathematical formulas, scientific notations, and chemical equations.
+    - Inline math MUST be wrapped in: $formula$
+    - Block math MUST be wrapped in: $$formula$$
+    - IMPORTANT: DO NOT use \(\) or \[\] delimiters. ONLY use $ and $$.
+    
+    CRITICAL: RANDOMNESS
+    - DO NOT always place the correct answer in the same index (e.g. B or C). 
+    - Randomly shuffle the position of the correct answer (A, B, C, or D) across all questions.
     
     The questions should follow the official ${board} ${level} exam style at ${difficulty} difficulty.
     Each question must have 4 options, a correct answer index (0-3), and a detailed explanation.
@@ -506,9 +539,35 @@ export async function generateMockExam(
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    const questions: QuizQuestion[] = JSON.parse(response.text || "[]");
+    return shuffleQuestions(questions);
   } catch (error) {
     console.error("Mock Exam Generation Error:", error);
     return [];
   }
+}
+
+function shuffleQuestions(questions: QuizQuestion[]): QuizQuestion[] {
+  return questions.map(q => {
+    if (!q.options || q.options.length < 2) return q;
+    
+    // Store reference to the correct text
+    const correctText = q.options[q.correctAnswer];
+    
+    // Shuffle options
+    const shuffledOptions = [...q.options];
+    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+    }
+    
+    // Find new correct index
+    const newCorrectIndex = shuffledOptions.indexOf(correctText);
+    
+    return {
+      ...q,
+      options: shuffledOptions,
+      correctAnswer: newCorrectIndex !== -1 ? newCorrectIndex : q.correctAnswer
+    };
+  });
 }

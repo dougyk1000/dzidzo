@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Announcement, Resource, Subject, ExamBoard } from '../types';
-import { Plus, Trash2, Megaphone, FileText, Loader2, Link as LinkIcon, RefreshCw, Sparkles } from 'lucide-react';
+import { Announcement, Resource, Subject, ExamBoard, UserProfile } from '../types';
+import { Plus, Trash2, Megaphone, FileText, Loader2, Link as LinkIcon, RefreshCw, Sparkles, Upload, Users, Check, X } from 'lucide-react';
 import { db } from '../firebase';
 import { 
   collection, 
@@ -10,7 +10,9 @@ import {
   addDoc, 
   deleteDoc, 
   doc, 
-  writeBatch 
+  writeBatch,
+  where,
+  updateDoc
 } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestore-errors';
 import { cn } from '../utils';
@@ -18,11 +20,13 @@ import { cn } from '../utils';
 export function AdminDashboard() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [pendingTeachers, setPendingTeachers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Form states
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
+  const [annExpiry, setAnnExpiry] = useState('');
   
   const [resTitle, setResTitle] = useState('');
   const [resDesc, setResDesc] = useState('');
@@ -30,6 +34,7 @@ export function AdminDashboard() {
   const [resSubject, setResSubject] = useState<Subject>('Maths');
   const [resBoard, setResBoard] = useState<ExamBoard>('ZIMSEC');
   const [resType, setResType] = useState<'PDF' | 'Link' | 'Note'>('Link');
+  const [isUploading, setIsUploading] = useState(false);
 
   // Quiz Gen states
   const [quizSubject, setQuizSubject] = useState<Subject>('Maths');
@@ -48,9 +53,20 @@ export function AdminDashboard() {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'resources'));
 
+    // Fetch pending teachers
+    const teacherQuery = query(
+      collection(db, 'users'), 
+      where('role', '==', 'staff'),
+      where('status', '==', 'pending')
+    );
+    const unsubTeachers = onSnapshot(teacherQuery, (snapshot) => {
+      setPendingTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+
     return () => {
       unsubAnn();
       unsubRes();
+      unsubTeachers();
     };
   }, []);
 
@@ -62,10 +78,12 @@ export function AdminDashboard() {
         title: annTitle,
         content: annContent,
         timestamp: Date.now(),
-        author: 'Admin'
+        author: 'Admin',
+        expiryDate: annExpiry || null
       });
       setAnnTitle('');
       setAnnContent('');
+      setAnnExpiry('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'announcements');
     }
@@ -92,6 +110,26 @@ export function AdminDashboard() {
       handleFirestoreError(error, OperationType.WRITE, 'resources');
     }
     setIsLoading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        alert("File too large. Max 2MB allowed.");
+        return;
+      }
+      
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        setResUrl(base64);
+        setIsUploading(false);
+        setResType('PDF'); // Default to PDF for uploads
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleGenerateQuiz = async () => {
@@ -162,6 +200,16 @@ export function AdminDashboard() {
     setIsLoading(false);
   };
 
+  const handleApproveTeacher = async (teacherId: string, approve: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', teacherId), {
+        status: approve ? 'approved' : 'rejected'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${teacherId}`);
+    }
+  };
+
   return (
     <div className="space-y-12 pb-12">
       <div className="relative h-64 rounded-[2.5rem] overflow-hidden mb-8 shadow-xl">
@@ -190,6 +238,58 @@ export function AdminDashboard() {
           Sync from External Sources
         </button>
       </div>
+
+      {/* Teacher Approvals Section */}
+      <section className="space-y-6">
+        <div className="flex items-center gap-3 text-slate-900 dark:text-white">
+          <Users className="text-amber-500" />
+          <h2 className="text-2xl font-bold">Teacher Approvals</h2>
+          {pendingTeachers.length > 0 && (
+            <span className="bg-amber-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
+              {pendingTeachers.length} Pending
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {pendingTeachers.map(teacher => (
+            <div key={teacher.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-500 font-bold text-xl uppercase">
+                  {teacher.name.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="font-bold dark:text-white">{teacher.name}</h3>
+                  <p className="text-xs text-slate-500">{teacher.class} • {teacher.examBoard}</p>
+                  <p className="text-[10px] text-blue-500 font-mono mt-1">{teacher.selectedSubjects.join(', ')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleApproveTeacher(teacher.id, true)}
+                  className="p-2 bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all"
+                  title="Approve"
+                >
+                  <Check size={20} />
+                </button>
+                <button 
+                  onClick={() => handleApproveTeacher(teacher.id, false)}
+                  className="p-2 bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-all"
+                  title="Reject"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {pendingTeachers.length === 0 && (
+            <div className="col-span-full py-12 text-center bg-slate-50 dark:bg-slate-950/50 rounded-3xl border-2 border-dashed border-slate-100 dark:border-slate-800">
+              <p className="text-slate-400 italic">No pending teacher signups to review.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Announcements Section */}
       <section className="space-y-6">
         <div className="flex items-center gap-3 text-slate-900 dark:text-white">
@@ -198,14 +298,25 @@ export function AdminDashboard() {
         </div>
         
         <form onSubmit={handleAddAnnouncement} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <input
-            type="text"
-            placeholder="Announcement Title"
-            value={annTitle}
-            onChange={(e) => setAnnTitle(e.target.value)}
-            className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
-            required
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              type="text"
+              placeholder="Announcement Title"
+              value={annTitle}
+              onChange={(e) => setAnnTitle(e.target.value)}
+              className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
+              required
+            />
+            <div className="flex flex-col">
+              <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1">Optional Expiry Date</label>
+              <input
+                type="date"
+                value={annExpiry}
+                onChange={(e) => setAnnExpiry(e.target.value)}
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
+              />
+            </div>
+          </div>
           <textarea
             placeholder="Content"
             value={annContent}
@@ -228,6 +339,9 @@ export function AdminDashboard() {
               <div>
                 <h3 className="font-bold dark:text-slate-100">{ann.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{ann.content}</p>
+                {ann.expiryDate && (
+                  <p className="text-[10px] text-rose-500 font-bold uppercase mt-2">Expires: {new Date(ann.expiryDate).toLocaleDateString()}</p>
+                )}
               </div>
               <button onClick={() => handleDelete('announcements', ann.id)} className="text-rose-500 p-2 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg">
                 <Trash2 size={18} />
@@ -283,14 +397,21 @@ export function AdminDashboard() {
             />
           </div>
           <div className="space-y-4">
-            <input
-              type="url"
-              placeholder="URL (Google Drive, PDF, etc.)"
-              value={resUrl}
-              onChange={(e) => setResUrl(e.target.value)}
-              className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
-              required
-            />
+            <div className="flex gap-2">
+              <input
+                type="url"
+                placeholder="URL (Google Drive, PDF, etc.)"
+                value={resUrl.startsWith('data:') ? 'File Uploaded' : resUrl}
+                onChange={(e) => setResUrl(e.target.value)}
+                disabled={resUrl.startsWith('data:')}
+                className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100 disabled:opacity-50"
+                required
+              />
+              <label className="cursor-pointer bg-slate-100 dark:bg-slate-800 p-3 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-800">
+                <Upload className={cn("w-5 h-5", isUploading ? "animate-bounce text-blue-500" : "text-slate-500")} />
+                <input type="file" className="hidden" onChange={handleFileUpload} />
+              </label>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <select value={resSubject} onChange={(e) => setResSubject(e.target.value as Subject)} className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 dark:text-slate-100">
                 {['Maths', 'Physics', 'Chemistry', 'Biology', 'English'].map(s => <option key={s} value={s}>{s}</option>)}

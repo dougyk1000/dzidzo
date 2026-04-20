@@ -4,8 +4,11 @@ import { TrendingUp, AlertCircle, CheckCircle2, BookOpen, GraduationCap, Sparkle
 import { cn, cacheImage, getCachedImage } from '../utils';
 import { analyzeStudentProgress } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { Tooltip } from './Tooltip';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { translations } from '../translations';
 
 interface DashboardProps {
   progress: ProgressRecord[];
@@ -51,6 +54,7 @@ export function Dashboard({
   tutorStyle,
   selectedSubjects = []
 }: DashboardProps) {
+  const t = translations[language];
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeSubject, setActiveSubject] = useState<Subject>(selectedSubjects[0] || 'Maths');
@@ -94,7 +98,7 @@ export function Dashboard({
     const maxAttempts = Math.max(...Object.values(recordsBySubject).map(arr => arr.length), 0);
     
     return Array.from({ length: maxAttempts }, (_, i) => {
-      const entry: any = { attempt: `Attempt ${i + 1}`, effortIndex: i + 1 };
+      const entry: any = { attempt: `${t.attempt} ${i + 1}`, effortIndex: i + 1 };
       subjects.forEach(s => {
         if (recordsBySubject[s][i]) {
           entry[s] = recordsBySubject[s][i].score;
@@ -160,8 +164,8 @@ export function Dashboard({
                 <Sparkles size={24} />
               </div>
               <div>
-                <h3 className="text-2xl font-bold">Weekly Progress Summary</h3>
-                <p className="text-indigo-100 text-sm">Insights from {chatbotName}</p>
+                <h3 className="text-2xl font-bold">{t.weeklySummaryTitle}</h3>
+                <p className="text-indigo-100 text-sm">{t.insightsFrom.replace('{name}', chatbotName)}</p>
               </div>
             </div>
             {!weeklySummary && (
@@ -170,7 +174,7 @@ export function Dashboard({
                 disabled={isGeneratingSummary || progress.length === 0}
                 className="bg-white text-indigo-600 px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-50 transition-all disabled:opacity-50"
               >
-                {isGeneratingSummary ? <Loader2 className="animate-spin" size={20} /> : 'Generate Summary'}
+                {isGeneratingSummary ? <Loader2 className="animate-spin" size={20} /> : t.generateSummary}
               </button>
             )}
           </div>
@@ -189,16 +193,16 @@ export function Dashboard({
                       )} 
                     />
                   ))}
-                  <span className="ml-2 font-bold">{weeklySummary.rating}/5 Rating</span>
+                  <span className="ml-2 font-bold">{t.ratingOutOfFive.replace('{rating}', weeklySummary.rating.toString())}</span>
                 </div>
                 <p className="text-indigo-50 leading-relaxed italic">"{weeklySummary.summary}"</p>
                 <div>
-                  <h4 className="font-bold text-sm uppercase tracking-wider mb-2 text-indigo-200">Your Potential</h4>
+                  <h4 className="font-bold text-sm uppercase tracking-wider mb-2 text-indigo-200">{t.yourPotential}</h4>
                   <p className="text-white">{weeklySummary.potential}</p>
                 </div>
               </div>
               <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10">
-                <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-indigo-200">Areas to Improve</h4>
+                <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-indigo-200">{t.areasToImprove}</h4>
                 <ul className="space-y-2">
                   {weeklySummary.weaknesses.map((w, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
@@ -230,7 +234,7 @@ export function Dashboard({
         <div className="space-y-4 mb-8">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white">
             <Megaphone size={20} className="text-blue-600" />
-            <h3 className="font-bold text-lg">Latest Announcements</h3>
+            <h3 className="font-bold text-lg">{t.latestAnnouncements}</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {announcements.map(ann => (
@@ -256,10 +260,10 @@ export function Dashboard({
           <Tooltip text="Your consecutive study days" position="top">
             <div className="flex items-center gap-3 text-amber-600 mb-2">
               <TrendingUp size={20} />
-              <span className="text-sm font-semibold uppercase tracking-wider">Study Streak</span>
+              <span className="text-sm font-semibold uppercase tracking-wider">{t.studyStreak}</span>
             </div>
           </Tooltip>
-          <p className="text-4xl font-bold text-slate-900 dark:text-slate-100">{streak} Days</p>
+          <p className="text-4xl font-bold text-slate-900 dark:text-slate-100">{streak} {t.days}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Keep it up! Consistency is key.</p>
         </div>
         
@@ -270,7 +274,7 @@ export function Dashboard({
           <Tooltip text="Topics where you scored above 80%" position="top">
             <div className="flex items-center gap-3 text-blue-600 mb-2">
               <BookOpen size={20} />
-              <span className="text-sm font-semibold uppercase tracking-wider">Topics Mastered</span>
+              <span className="text-sm font-semibold uppercase tracking-wider">{t.topicsMastered}</span>
             </div>
           </Tooltip>
           <p className="text-4xl font-bold text-slate-900 dark:text-slate-100">
@@ -286,7 +290,7 @@ export function Dashboard({
           <Tooltip text="Topics that need more practice" position="top">
             <div className="flex items-center gap-3 text-rose-600 mb-2">
               <AlertCircle size={20} />
-              <span className="text-sm font-semibold uppercase tracking-wider">Weak Topics</span>
+              <span className="text-sm font-semibold uppercase tracking-wider">{t.weakTopics}</span>
             </div>
           </Tooltip>
           <p className="text-4xl font-bold text-slate-900 dark:text-slate-100">{getWeakTopics().length}</p>
@@ -304,8 +308,8 @@ export function Dashboard({
             <BarChart3 size={24} />
           </div>
           <div>
-            <h3 className="text-xl font-bold dark:text-slate-100">Performance Comparison</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Comparing your progress across all subjects.</p>
+            <h3 className="text-xl font-bold dark:text-slate-100">{t.performanceComparison}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t.comparePerformanceDesc}</p>
           </div>
         </div>
 
@@ -397,8 +401,8 @@ export function Dashboard({
             </ResponsiveContainer>
             </>
           ) : (
-            <div className="h-full flex items-center justify-center text-slate-400 italic text-sm border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
-              Complete topics in your subjects to see your performance comparison graph.
+            <div className="h-full flex items-center justify-center text-slate-400 italic text-sm border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-8 text-center">
+              {t.completeTopicsToSeeChart}
             </div>
           )}
         </div>
@@ -415,8 +419,8 @@ export function Dashboard({
               <Sparkles size={24} />
             </div>
             <div>
-              <h3 className="text-xl font-bold dark:text-slate-100">AI Deep Analysis</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Personalized insights for {studentName}.</p>
+              <h3 className="text-xl font-bold dark:text-slate-100">{t.aiDeepAnalysis}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.personalizedInsightsFor.replace('{name}', studentName)}</p>
             </div>
           </div>
           <div className="hidden md:block w-32 h-12 opacity-20">
@@ -431,11 +435,11 @@ export function Dashboard({
                   className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-95"
                 >
                   {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-                  Analyze Progress
+                  {t.analyzeProgress}
                 </button>
               </Tooltip>
               {progress.length === 0 && (
-                <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tighter">Need study data to analyze</p>
+                <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tighter">{t.needStudyData}</p>
               )}
             </div>
           )}
@@ -443,12 +447,12 @@ export function Dashboard({
 
         {analysis && (
           <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 prose prose-indigo max-w-none dark:prose-invert">
-            <ReactMarkdown>{analysis}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{analysis}</ReactMarkdown>
             <button 
               onClick={() => setAnalysis(null)}
               className="mt-6 text-sm font-bold text-indigo-600 hover:text-indigo-700"
             >
-              Refresh Analysis
+              {t.refreshAnalysis}
             </button>
           </div>
         )}
@@ -460,7 +464,7 @@ export function Dashboard({
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
               <ClipboardCheck size={24} />
             </div>
-            <h3 className="text-2xl font-bold mb-2">Mock Exam</h3>
+            <h3 className="text-2xl font-bold mb-2">{t.exams}</h3>
             <p className="text-blue-100 mb-6 text-sm">
               Take a full 10-question exam based on your recent chat history.
             </p>
@@ -468,7 +472,7 @@ export function Dashboard({
               onClick={onStartExam}
               className="bg-white text-blue-600 px-6 py-3 rounded-xl font-bold hover:bg-blue-50 transition-all active:scale-95 shadow-lg"
             >
-              Start Exam
+              {t.startExam}
             </button>
           </div>
           <div className="absolute right-[-40px] bottom-[-40px] opacity-10 group-hover:scale-110 transition-transform duration-500">
@@ -481,7 +485,7 @@ export function Dashboard({
             <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
               <BookOpen size={24} />
             </div>
-            <h3 className="text-2xl font-bold mb-2">Homework</h3>
+            <h3 className="text-2xl font-bold mb-2">{t.homework}</h3>
             <p className="text-emerald-100 mb-6 text-sm">
               Check your current assignments and due dates.
             </p>
@@ -489,7 +493,7 @@ export function Dashboard({
               onClick={onStartHomework}
               className="bg-white text-emerald-600 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-all active:scale-95 shadow-lg"
             >
-              View Homework
+              {t.viewHomework}
             </button>
           </div>
           <div className="absolute right-[-40px] bottom-[-40px] opacity-10 group-hover:scale-110 transition-transform duration-500">
@@ -502,7 +506,7 @@ export function Dashboard({
             <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
               <Sparkles size={24} className="text-amber-400" />
             </div>
-            <h3 className="text-2xl font-bold mb-2">Quick Quiz</h3>
+            <h3 className="text-2xl font-bold mb-2">{t.quiz}</h3>
             <p className="text-slate-300 mb-6 text-sm">
               5 rapid-fire questions to test your general {activeSubject} knowledge.
             </p>
@@ -510,7 +514,7 @@ export function Dashboard({
               onClick={onStartSimulation}
               className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-95 shadow-lg"
             >
-              Start Quiz
+              {t.startQuiz}
             </button>
           </div>
           <div className="absolute right-[-40px] bottom-[-40px] opacity-10 group-hover:scale-110 transition-transform duration-500">
@@ -525,7 +529,7 @@ export function Dashboard({
             <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center">
               <CheckCircle2 size={24} />
             </div>
-            <h3 className="font-bold text-xl text-slate-900 dark:text-slate-100">Topic Performance</h3>
+            <h3 className="font-bold text-xl text-slate-900 dark:text-slate-100">{t.topicPerformance}</h3>
           </div>
           <div className="hidden sm:block">
             <img src="https://picsum.photos/seed/topic-performance/200/100" alt="Performance" className="h-10 opacity-20 object-contain" referrerPolicy="no-referrer" />
@@ -534,7 +538,7 @@ export function Dashboard({
         <div className="divide-y divide-slate-50 dark:divide-slate-800">
           {progress.length === 0 ? (
             <div className="p-12 text-center text-slate-400 italic">
-              No study data yet. Start learning to see your progress!
+              {t.noStudyDataYet}
             </div>
           ) : (
             progress.map((p, i) => (
@@ -561,7 +565,7 @@ export function Dashboard({
                     p.weaknessLevel === 'medium' ? "text-amber-500" :
                     "text-emerald-500"
                   )}>
-                    {p.weaknessLevel} priority
+                    {p.weaknessLevel} {t.priority}
                   </p>
                 </div>
               </div>

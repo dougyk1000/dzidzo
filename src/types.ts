@@ -23,6 +23,7 @@ export interface UserProfile {
   studyStreak: number;
   lastActive: string;
   role: 'student' | 'staff' | 'admin';
+  status?: 'pending' | 'approved' | 'rejected';
   tutorStyle?: string;
   chatbotName?: string;
   bookmarkedResourceIds?: string[];
@@ -74,6 +75,7 @@ export interface Announcement {
   content: string;
   timestamp: number;
   author: string;
+  expiryDate?: string;
 }
 
 export interface Resource {

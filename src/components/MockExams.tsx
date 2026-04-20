@@ -5,6 +5,9 @@ import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw, ClipboardCheck, 
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { playBeep } from '../utils/audio';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 interface MockExamsProps {
   board: ExamBoard;
@@ -28,6 +31,7 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
   const [isLoading, setIsLoading] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [topic, setTopic] = useState(autoStartTopic || '');
+  const [questionCount, setQuestionCount] = useState(10);
   const [timeLeft, setTimeLeft] = useState(0);
   const [examDuration, setExamDuration] = useState(0);
   const [isImageLoading, setIsImageLoading] = useState(false);
@@ -99,13 +103,13 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
     if (customTopic) setTopic(customTopic);
     const finalDiff = customDifficulty || difficulty;
     
-    // Format history for Gemini
-    const history = chatHistory.slice(-10).map(m => ({
+    // Format full history for Gemini (removed truncation)
+    const history = chatHistory.map(m => ({
       role: m.role === 'user' ? 'user' as const : 'model' as const,
       parts: [{ text: m.content }]
     }));
 
-    const q = await generateMockExam(subject, board, level, language, history, customTopic || topic, 10, finalDiff);
+    const q = await generateMockExam(subject, board, level, language, history, customTopic || topic, questionCount, finalDiff);
     setQuestions(q);
     const duration = q.length * 90; // 1.5 minutes per question
     setTimeLeft(duration);
@@ -328,7 +332,11 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
           </div>
         )}
 
-        <h3 className="text-2xl font-bold leading-relaxed dark:text-white">{currentQ.question}</h3>
+        <div className="text-2xl font-bold leading-relaxed dark:text-white prose dark:prose-invert max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {currentQ.question}
+          </ReactMarkdown>
+        </div>
         
         <div className="grid grid-cols-1 gap-4">
           {currentQ.options.map((opt, i) => {
@@ -357,7 +365,11 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
                   )}>
                     {String.fromCharCode(65 + i)}
                   </div>
-                  <span className="font-medium">{opt}</span>
+                  <div className="prose dark:prose-invert prose-sm">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {opt}
+                    </ReactMarkdown>
+                  </div>
                 </div>
                 {isAnswered && isCorrect && <CheckCircle2 size={24} />}
                 {isAnswered && isSelected && !isCorrect && <XCircle size={24} />}
@@ -377,7 +389,11 @@ export function MockExams({ board, level, language, chatHistory, availableSubjec
                 <Sparkles size={20} />
                 <p className="text-sm font-bold uppercase tracking-widest">Explanation</p>
               </div>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{currentQ.explanation}</p>
+              <div className="text-slate-600 dark:text-slate-400 leading-relaxed prose dark:prose-invert">
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {currentQ.explanation}
+                </ReactMarkdown>
+              </div>
               <button 
                 onClick={nextQuestion}
                 className="mt-6 w-full bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-blue-700 shadow-xl shadow-slate-200 dark:shadow-none"

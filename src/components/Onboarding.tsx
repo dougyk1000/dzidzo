@@ -26,6 +26,27 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [subjectSearch, setSubjectSearch] = useState('');
   const [customSubjects, setCustomSubjects] = useState<Subject[]>([]);
   const [chatbotName, setChatbotName] = useState('DzidzoBot');
+  const [staffCode, setStaffCode] = useState('');
+  const [staffError, setStaffError] = useState('');
+
+  const STAFF_VERIFICATION_CODE = 'STAFF123'; // Default code
+
+  const handleRoleNext = () => {
+    if (role === 'student') {
+      setStep(3);
+    } else {
+      setStep(2.5); // Verification step
+    }
+  };
+
+  const verifyStaff = () => {
+    if (staffCode === STAFF_VERIFICATION_CODE) {
+      setStep(3);
+      setStaffError('');
+    } else {
+      setStaffError('Invalid verification code. Please contact the administrator.');
+    }
+  };
 
   const toggleSubject = (s: Subject) => {
     setSelectedSubjects(prev => 
@@ -138,7 +159,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 Back
               </button>
               <button
-                onClick={() => setStep(3)}
+                onClick={handleRoleNext}
                 className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold"
               >
                 Next Step
@@ -147,6 +168,45 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
+        {step === 2.5 && (
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-bold dark:text-white">Staff Verification</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Please enter your school's staff verification code.</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Verification Code</label>
+                <input
+                  type="password"
+                  value={staffCode}
+                  onChange={(e) => setStaffCode(e.target.value)}
+                  placeholder="Enter code..."
+                  className={cn(
+                    "w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                    staffError ? "border-rose-500 ring-rose-500/20" : "border-slate-200 dark:border-slate-800"
+                  )}
+                />
+                {staffError && <p className="text-xs text-rose-500 mt-1">{staffError}</p>}
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold"
+              >
+                Back
+              </button>
+              <button
+                disabled={!staffCode}
+                onClick={verifyStaff}
+                className="flex-2 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-50"
+              >
+                Verify & Continue
+              </button>
+            </div>
+          </div>
+        )}
         {step === 3 && (
           <div className="space-y-6 relative z-10">
             <div>
@@ -320,6 +380,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   name: fullName, 
                   class: className, 
                   role, 
+                  status: role === 'staff' ? 'pending' : 'approved',
                   examBoard: board!, 
                   selectedSubjects, 
                   level: level!, 

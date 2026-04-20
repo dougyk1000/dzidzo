@@ -29,22 +29,34 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "douglasnkowo0145@gmail.com" && request.auth.token.email_verified == true));
+        ( (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "douglasnkowo0145@gmail.com" && request.auth.token.email_verified == true) );
     }
 
     function isStaff() {
       return isSignedIn() && 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['staff', 'admin'] ||
-         isAdmin());
+        ( (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['staff', 'admin']) ||
+          isAdmin() );
+    }
+
+    function isApproved() {
+      return isSignedIn() && 
+        ( (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved') ||
+          isAdmin() );
+    }
+
+    function canManageSchool() {
+      return isStaff() && isApproved();
     }
 
     // --- Validation Helpers ---
     function isValidUser(data) {
       return data.id is string && data.id == request.auth.uid &&
-             data.role in ['student', 'staff', 'admin'];
+             data.role in ['student', 'staff', 'admin'] &&
+             data.status in ['pending', 'approved', 'rejected'];
     }
 
     function isValidMessage(data) {
@@ -68,13 +80,13 @@ service cloud.firestore {
     // Announcements
     match /announcements/{announcementId} {
       allow read: if isSignedIn();
-      allow write: if isStaff();
+      allow write: if canManageSchool();
     }
 
     // Resources
     match /resources/{resourceId} {
       allow read: if isSignedIn();
-      allow write: if isStaff();
+      allow write: if canManageSchool();
     }
 
     // Messages
@@ -88,7 +100,7 @@ service cloud.firestore {
     // Homework
     match /homework/{homeworkId} {
       allow read: if isSignedIn();
-      allow write: if isStaff();
+      allow write: if canManageSchool();
     }
 
     // Progress

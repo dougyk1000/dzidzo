@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { GraduationCap, LayoutDashboard, MessageSquare, BookOpen, Settings, LogOut, LogIn, AlertTriangle, User, ShieldCheck, Megaphone, FileText, Timer, Link as LinkIcon, Search, Sun, Moon, Sparkles, Plus, Trash2, X, ClipboardCheck, Menu, Loader2, Check, RefreshCw, Bookmark, BookmarkCheck } from 'lucide-react';
 import { ALL_SUBJECTS } from './constants';
 import { LanguageToggle } from './components/LanguageToggle';
@@ -11,15 +11,19 @@ import { MockExams } from './components/MockExams';
 import { Language, Subject, ChatMessage, ProgressRecord, UserProfile, Announcement, Resource, ExamBoard, Homework } from './types';
 import { getTutorResponse, solvePastPaperQuestion, generateWeeklySummary } from './services/geminiService';
 import { HomeworkTab } from './components/HomeworkTab';
-import { cn } from './utils';
+import { cn, compressImage } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { translations } from './translations';
 import { Tooltip } from './components/Tooltip';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
 import { 
   doc, 
   getDoc, 
+  getDocFromServer,
   setDoc, 
   updateDoc, 
   collection, 
@@ -97,6 +101,90 @@ export default function App() {
   );
 }
 
+// Admin Login Modal Component
+function AdminLoginModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === 'Admin0789' && password === '#Br@@1') {
+      onSuccess();
+      onClose();
+      setUsername('');
+      setPassword('');
+      setError('');
+    } else {
+      setError('Invalid credentials. Access denied.');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl z-[200] flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative"
+      >
+        <button onClick={onClose} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors">
+          <X size={24} />
+        </button>
+        
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-rose-600/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-white">Restricted Access</h2>
+          <p className="text-slate-500 text-sm mt-2">Enter your developer credentials to enter the admin world.</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Username</label>
+            <input 
+              type="text" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-rose-500/20 outline-none transition-all placeholder:text-slate-700 font-mono"
+              placeholder="Admin ID"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-rose-500/20 outline-none transition-all placeholder:text-slate-700 font-mono"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          
+          {error && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-bold flex items-center gap-2">
+              <AlertTriangle size={14} />
+              {error}
+            </div>
+          )}
+
+          <button 
+            type="submit"
+            className="w-full bg-white text-slate-900 font-black py-4 rounded-xl hover:bg-slate-200 transition-all shadow-xl active:scale-[0.98]"
+          >
+            Authenticate
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+// DzidzoApp
 function DzidzoApp() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -137,6 +225,37 @@ function DzidzoApp() {
   const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [pendingAssessment, setPendingAssessment] = useState<{ type: 'quiz' | 'exam', subject: string, topic?: string } | null>(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const [isAdminWorld, setIsAdminWorld] = useState(false);
+  const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
+
+  const t = translations[language];
+
+  // Logic to filter expired announcements
+  const activeAnnouncements = useMemo(() => {
+    const now = new Date();
+    return announcements.filter(ann => {
+      if (!ann.expiryDate) return true;
+      return new Date(ann.expiryDate) > now;
+    });
+  }, [announcements]);
+
+  // Connection Check (CRITICAL)
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firestore connected successfully");
+        setConnectionError(false);
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+          setConnectionError(true);
+        }
+      }
+    }
+    testConnection();
+  }, []);
 
   const mapMessagesToHistory = useCallback((msgs: ChatMessage[]) => {
     return msgs.map(m => {
@@ -155,11 +274,12 @@ function DzidzoApp() {
   // Theme effect
   useEffect(() => {
     const root = document.documentElement;
-    console.log('Applying theme:', theme);
     if (theme === 'dark') {
       root.classList.add('dark');
+      root.style.colorScheme = 'dark';
     } else {
       root.classList.remove('dark');
+      root.style.colorScheme = 'light';
     }
     localStorage.setItem('dzidzo-theme', theme);
   }, [theme]);
@@ -188,6 +308,7 @@ function DzidzoApp() {
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         try {
+          // Use getDoc with cache normally, but fall back to server if offline error occurs
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             const profileData = userDoc.data() as UserProfile;
@@ -200,7 +321,10 @@ function DzidzoApp() {
             setProfile(null); // Trigger onboarding
           }
         } catch (error) {
+          console.error("Profile fetch error:", error);
+          // If the default getDoc fails with offline error, try to warn the user
           handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          setConnectionError(true);
         }
       } else {
         setProfile(null);
@@ -262,6 +386,12 @@ function DzidzoApp() {
       unsubProg();
     };
   }, [user, isAuthReady, profile]);
+
+  useEffect(() => {
+    if (profile?.examBoard && !resourceBoardFilter) {
+      setResourceBoardFilter(profile.examBoard);
+    }
+  }, [profile?.examBoard, resourceBoardFilter]);
 
   const handleOnboardingComplete = async (data: Partial<UserProfile>) => {
     if (!user) return;
@@ -396,11 +526,16 @@ function DzidzoApp() {
   const handleUploadImage = async (base64: string) => {
     if (!user || !profile) return;
     
-    // Add user message with image first
+    setIsLoading(true);
+    
+    // Compress image before storage to avoid Firestore 1MB limit
+    const compressedImage = await compressImage(base64);
+    
+    // Add user message with compressed image first
     const userMsg = {
       role: 'user' as const,
       content: "I've uploaded an image. Can you help me with this?",
-      imageUrl: `data:image/jpeg;base64,${base64}`,
+      imageUrl: compressedImage,
       timestamp: Date.now(),
       uid: user.uid
     };
@@ -411,12 +546,12 @@ function DzidzoApp() {
       handleFirestoreError(error, OperationType.WRITE, 'messages');
     }
 
-    setIsLoading(true);
-    
     const history = mapMessagesToHistory(messages);
 
+    // Pass the raw base64 (or compressed if it fits better) to the AI service
+    // Using the compressed one for consistency
     const response = await solvePastPaperQuestion(
-      base64, 
+      compressedImage.split(',')[1], 
       language, 
       profile.selectedSubjects as Subject[], 
       profile.examBoard, 
@@ -546,14 +681,101 @@ function DzidzoApp() {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
+  if (profile.role === 'staff' && profile.status === 'pending') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 text-center space-y-6"
+        >
+          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+            <Timer size={40} className="animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white">Approval Pending</h2>
+            <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
+              Hello, <strong>{profile.name}</strong>! Your teacher account has been created successfully.
+            </p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              For security reasons, your account must be manually approved by the school administrator before you can access the staff portal. Please check back later.
+            </p>
+          </div>
+          <div className="pt-4 space-y-3">
+             <button 
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            >
+              <LogOut size={20} />
+              Sign Out
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (profile.role === 'staff' && profile.status === 'rejected') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 text-center space-y-6"
+        >
+          <div className="w-20 h-20 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+            <X size={40} />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white">Access Denied</h2>
+            <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
+              Sorry, <strong>{profile.name}</strong>. Your application for a teacher account was not approved by the administration.
+            </p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              If you believe this is a mistake, please contact the school administration directly.
+            </p>
+          </div>
+          <div className="pt-4 space-y-3">
+             <button 
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            >
+              <LogOut size={20} />
+              Return to Login
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (isAdminWorld) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12 overflow-y-auto">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-slate-900 dark:bg-slate-800 rounded-lg flex items-center justify-center text-white">
+                <ShieldCheck size={24} />
+              </div>
+              <h1 className="text-2xl font-black dark:text-white">Admin World</h1>
+            </div>
+            <button 
+              onClick={() => setIsAdminWorld(false)}
+              className="flex items-center gap-2 bg-rose-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg active:scale-95"
+            >
+              <LogOut size={18} />
+              Leave Admin World
+            </button>
+          </div>
+          <AdminDashboard />
+        </div>
+      </div>
+    );
+  }
+
   const isAdmin = user?.email === 'douglasnkowo3036@gmail.com' || profile?.role === 'admin';
   const isStaff = profile?.role === 'staff' || isAdmin;
-
-  useEffect(() => {
-    if (profile?.examBoard && !resourceBoardFilter) {
-      setResourceBoardFilter(profile.examBoard);
-    }
-  }, [profile?.examBoard]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -570,6 +792,17 @@ function DzidzoApp() {
 
   return (
     <div className="min-h-screen font-sans transition-colors duration-300 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <AdminLoginModal 
+        isOpen={isAdminLoginOpen} 
+        onClose={() => setIsAdminLoginOpen(false)} 
+        onSuccess={() => setIsAdminWorld(true)}
+      />
+      {connectionError && (
+        <div className="bg-rose-600 text-white p-3 text-center text-sm font-bold flex items-center justify-center gap-2 sticky top-0 z-[100] animate-pulse">
+          <AlertTriangle size={16} />
+          Connection Issue: Dzidzo is having trouble reaching the server. Please check your internet connection.
+        </div>
+      )}
       {/* Mobile Header */}
       <header className="lg:hidden border-b p-4 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2">
@@ -630,15 +863,15 @@ function DzidzoApp() {
                 
                 <nav className="flex-1 space-y-2">
                   {[
-                    { id: 'tutor', label: 'AI Tutor', icon: MessageSquare },
-                    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                    { id: 'homework', label: 'Homework', icon: BookOpen },
-                    { id: 'exams', label: 'Mock Exams', icon: ClipboardCheck },
-                    { id: 'quiz', label: 'Quiz Mode', icon: Timer },
-                    { id: 'resources', label: 'Resources', icon: FileText },
-                    { id: 'revision', label: 'Revision Plan', icon: BookOpen },
-                    { id: 'settings', label: 'Settings', icon: Settings },
-                    ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck }] : []),
+                    { id: 'tutor', label: t.lessons, icon: MessageSquare },
+                    { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+                    { id: 'homework', label: t.homework, icon: BookOpen },
+                    { id: 'exams', label: t.exams, icon: ClipboardCheck },
+                    { id: 'quiz', label: t.quiz, icon: Timer },
+                    { id: 'resources', label: t.resources, icon: FileText },
+                    { id: 'revision', label: t.revisionPlan, icon: BookOpen },
+                    { id: 'settings', label: t.settings, icon: Settings },
+                    ...(isAdmin ? [{ id: 'admin', label: t.admin, icon: ShieldCheck }] : []),
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -668,7 +901,7 @@ function DzidzoApp() {
                       {theme === 'dark' ? <Moon size={18} className="text-amber-400" /> : <Sun size={18} className="text-amber-500" />}
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="text-sm font-bold dark:text-white">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</p>
+                      <p className="text-sm font-bold dark:text-white">{theme === 'dark' ? t.themeDark : t.themeLight}</p>
                     </div>
                   </button>
                   
@@ -677,7 +910,7 @@ function DzidzoApp() {
                     className="flex items-center gap-4 w-full px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all font-semibold"
                   >
                     <LogOut size={18} />
-                    Logout
+                    {t.logout}
                   </button>
                 </div>
               </div>
@@ -698,15 +931,15 @@ function DzidzoApp() {
 
           <nav className="flex-1 space-y-2">
             {[
-              { id: 'tutor', label: 'AI Tutor', icon: MessageSquare, tooltip: 'Chat with your AI tutor' },
-              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, tooltip: 'View your progress and stats' },
-              { id: 'homework', label: 'Homework', icon: BookOpen, tooltip: 'View and manage assignments' },
-              { id: 'exams', label: 'Mock Exams', icon: ClipboardCheck, tooltip: 'Full exam simulations based on chat' },
-              { id: 'quiz', label: 'Quiz Mode', icon: Timer, tooltip: 'Practice with quick quizzes' },
-              { id: 'resources', label: 'Resources', icon: FileText, tooltip: 'Study materials and notes' },
-              { id: 'revision', label: 'Revision Plan', icon: BookOpen, tooltip: 'Your personalized study schedule' },
-              { id: 'settings', label: 'Settings', icon: Settings, tooltip: 'App preferences and profile' },
-              ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck, tooltip: 'Admin controls' }] : []),
+              { id: 'tutor', label: t.lessons, icon: MessageSquare, tooltip: 'Chat with your AI tutor' },
+              { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard, tooltip: 'View your progress and stats' },
+              { id: 'homework', label: t.homework, icon: BookOpen, tooltip: 'View and manage assignments' },
+              { id: 'exams', label: t.exams, icon: ClipboardCheck, tooltip: 'Full exam simulations based on chat' },
+              { id: 'quiz', label: t.quiz, icon: Timer, tooltip: 'Practice with quick quizzes' },
+              { id: 'resources', label: t.resources, icon: FileText, tooltip: 'Study materials and notes' },
+              { id: 'revision', label: t.revisionPlan, icon: BookOpen, tooltip: 'Your personalized study schedule' },
+              { id: 'settings', label: t.settings, icon: Settings, tooltip: 'App preferences and profile' },
+              ...(isAdmin ? [{ id: 'admin', label: t.admin, icon: ShieldCheck, tooltip: 'Admin Management' }] : [])
             ].map((item) => (
               <Tooltip key={item.id} text={item.tooltip} position="right">
                 <button 
@@ -731,7 +964,7 @@ function DzidzoApp() {
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
             >
               {theme === 'dark' ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} className="text-slate-500" />}
-              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              {theme === 'dark' ? t.themeLight : t.themeDark}
             </button>
             <div className="px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
@@ -747,7 +980,7 @@ function DzidzoApp() {
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all"
             >
               <LogOut size={20} />
-              Logout
+              {t.logout}
             </button>
           </div>
         </div>
@@ -758,20 +991,20 @@ function DzidzoApp() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div>
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight transition-colors duration-300">
-              {activeTab === 'tutor' ? 'AI Exam Tutor' : 
-               activeTab === 'dashboard' ? 'My Progress' : 
-               activeTab === 'exams' ? 'Mock Exams' :
-               activeTab === 'quiz' ? 'Quick Quizzes' :
-               activeTab === 'resources' ? 'Study Resources' :
-               activeTab === 'admin' ? 'Admin Control' : 'Revision Planner'}
+              {activeTab === 'tutor' ? t.lessons : 
+               activeTab === 'dashboard' ? t.dashboard : 
+               activeTab === 'exams' ? t.exams :
+               activeTab === 'quiz' ? t.quiz :
+               activeTab === 'resources' ? t.resources :
+               activeTab === 'admin' ? t.admin : t.revisionPlan}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 mt-1 transition-colors duration-300">
-              {activeTab === 'tutor' ? `Get step-by-step help with ${profile.examBoard} studies.` : 
-               activeTab === 'dashboard' ? 'Track your performance across subjects.' : 
-               activeTab === 'exams' ? 'Full exams generated from your chat history.' :
-               activeTab === 'quiz' ? 'Test your knowledge with quick AI questions.' :
-               activeTab === 'resources' ? 'Access curated notes and materials.' :
-               activeTab === 'admin' ? 'Manage announcements and resources.' : 'Your personalized study schedule.'}
+              {activeTab === 'tutor' ? t.tutorDesc : 
+               activeTab === 'dashboard' ? t.dashboardDesc : 
+               activeTab === 'exams' ? t.examsDesc :
+               activeTab === 'quiz' ? t.quizDesc :
+               activeTab === 'resources' ? t.resourcesDesc :
+               activeTab === 'admin' ? t.adminDesc : t.revisionDesc}
             </p>
           </div>
           
@@ -821,7 +1054,7 @@ function DzidzoApp() {
                 board={profile.examBoard}
                 level={profile.level}
                 language={language}
-                announcements={announcements}
+                announcements={activeAnnouncements}
                 theme={theme}
                 onStartSimulation={() => setActiveTab('quiz')}
                 onStartExam={() => setActiveTab('exams')}
@@ -864,8 +1097,13 @@ function DzidzoApp() {
                 autoStartSubject={pendingAssessment?.type === 'quiz' ? pendingAssessment.subject : undefined}
                 autoStartTopic={pendingAssessment?.type === 'quiz' ? pendingAssessment.topic : undefined}
                 onComplete={async (score, selectedSubject) => {
-                  setPendingAssessment(null);
                   if (!user) return;
+                  const isFromTutor = !!pendingAssessment;
+                  const assessmentType = pendingAssessment?.type === 'exam' ? 'mock exam' : 'quiz';
+                  const assessmentTopic = pendingAssessment?.topic || 'General';
+                  
+                  setPendingAssessment(null);
+                  
                   // Save progress logic
                   const newRecord: ProgressRecord = {
                     topic: `Quiz: ${selectedSubject}`,
@@ -883,6 +1121,24 @@ function DzidzoApp() {
                       timestamp: Date.now()
                     });
                     setProgress(prev => [newRecord, ...prev]);
+
+                    if (isFromTutor) {
+                      setActiveTab('tutor');
+                      const analysisPrompt = `LEARNER COMPLETED ${assessmentType.toUpperCase()}:
+                      Subject: ${selectedSubject}
+                      Topic: ${assessmentTopic}
+                      Score: ${Math.round(score)}%
+                      
+                      Please provide:
+                      1. Correct answers and step-by-step workings for the topics covered.
+                      2. A helpful assessment of how I handled the exercise.
+                      3. Clear guidance on where I went wrong.
+                      4. Suggest if I need another exercise or if I've mastered it.
+                      
+                      Answer in my preferred language (${language}).`;
+                      
+                      handleSendMessage(analysisPrompt);
+                    }
                   } catch (error) {
                     handleFirestoreError(error, OperationType.WRITE, 'progress');
                   }
@@ -908,8 +1164,13 @@ function DzidzoApp() {
                 autoStartSubject={pendingAssessment?.type === 'exam' ? pendingAssessment.subject : undefined}
                 autoStartTopic={pendingAssessment?.type === 'exam' ? pendingAssessment.topic : undefined}
                 onComplete={async (score, selectedSubject) => {
-                  setPendingAssessment(null);
                   if (!user) return;
+                  const isFromTutor = !!pendingAssessment;
+                  const assessmentType = 'mock exam';
+                  const assessmentTopic = pendingAssessment?.topic || 'General';
+
+                  setPendingAssessment(null);
+                  
                   const newRecord: ProgressRecord = {
                     topic: `Mock Exam: ${selectedSubject}`,
                     score: Math.round(score),
@@ -926,6 +1187,24 @@ function DzidzoApp() {
                       timestamp: Date.now()
                     });
                     setProgress(prev => [newRecord, ...prev]);
+
+                    if (isFromTutor) {
+                      setActiveTab('tutor');
+                      const analysisPrompt = `LEARNER COMPLETED ${assessmentType.toUpperCase()}:
+                      Subject: ${selectedSubject}
+                      Topic: ${assessmentTopic}
+                      Score: ${Math.round(score)}%
+                      
+                      Please provide:
+                      1. Correct answers and step-by-step workings for the topics covered.
+                      2. A helpful assessment of how I handled the exercise.
+                      3. Clear guidance on where I went wrong.
+                      4. Suggest if I need another exercise or if I've mastered it.
+                      
+                      Answer in my preferred language (${language}).`;
+                      
+                      handleSendMessage(analysisPrompt);
+                    }
                   } catch (error) {
                     handleFirestoreError(error, OperationType.WRITE, 'progress');
                   }
@@ -1328,12 +1607,12 @@ function DzidzoApp() {
                     <strong>The School:</strong> Dzidzo Academy is a forward-thinking institution committed to integrating technology with traditional pedagogy to create an immersive learning environment.
                   </p>
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <p className="font-bold text-slate-900 dark:text-white mb-2">Developer Portfolio</p>
-                    <p>
-                      Developed with ❤️ by a passionate engineer dedicated to building tools that empower people. 
-                      <br />
-                      <a href="#" className="text-blue-600 hover:underline">View Portfolio</a> | <a href="#" className="text-blue-600 hover:underline">LinkedIn</a>
-                    </p>
+                    <button 
+                      onClick={() => setIsAdminLoginOpen(true)}
+                      className="font-bold text-slate-900 dark:text-white mb-2 hover:text-blue-600 transition-colors text-left w-full"
+                    >
+                      Developer Portfolio
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1383,35 +1662,35 @@ function DzidzoApp() {
               </div>
 
               {!revisionPlan ? (
-                <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-4 shadow-sm">
-                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+                <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-sm">
+                  <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto">
                     <BookOpen size={32} />
                   </div>
-                  <h3 className="text-xl font-bold">Personalized Revision Plan</h3>
-                  <p className="text-slate-500 max-w-md mx-auto">
+                  <h3 className="text-xl font-bold dark:text-white">Personalized Revision Plan</h3>
+                  <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                     Based on your performance, we're generating a custom 7-day schedule to tackle your weak topics.
                   </p>
                   <button 
                     onClick={generateRevisionPlan}
                     disabled={isGeneratingPlan}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+                    className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-semibold hover:bg-blue-700 transition-all shadow-lg dark:shadow-none disabled:opacity-50"
                   >
                     {isGeneratingPlan ? 'Generating...' : 'Generate My Plan'}
                   </button>
                 </div>
               ) : (
-                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-xl font-bold">Your 7-Day Revision Plan</h3>
+                    <h3 className="text-xl font-bold dark:text-white">Your 7-Day Revision Plan</h3>
                     <button 
                       onClick={() => setRevisionPlan(null)}
-                      className="text-sm text-blue-600 font-medium"
+                      className="text-sm text-blue-600 dark:text-blue-400 font-medium"
                     >
                       Reset Plan
                     </button>
                   </div>
-                  <div className="prose prose-slate max-w-none">
-                    <ReactMarkdown>{revisionPlan}</ReactMarkdown>
+                  <div className="prose prose-slate dark:prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{revisionPlan}</ReactMarkdown>
                   </div>
                 </div>
               )}
