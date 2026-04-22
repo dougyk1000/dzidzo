@@ -58,6 +58,7 @@ export function Dashboard({
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeSubject, setActiveSubject] = useState<Subject>(selectedSubjects[0] || 'Maths');
+  const [isWeakModalOpen, setIsWeakModalOpen] = useState(false);
 
   useEffect(() => {
     if (selectedSubjects.length > 0 && !selectedSubjects.includes(activeSubject)) {
@@ -283,7 +284,10 @@ export function Dashboard({
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Out of {progress.length} total topics.</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+        <div 
+          onClick={() => setIsWeakModalOpen(true)}
+          className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group cursor-pointer hover:border-rose-500/50 transition-colors"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 opacity-5 group-hover:opacity-10 transition-opacity">
             <img src="https://picsum.photos/seed/warning/200/200" alt="warning" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
@@ -297,6 +301,53 @@ export function Dashboard({
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Topics needing urgent review.</p>
         </div>
       </div>
+
+      {/* Weak Topics Modal */}
+      {isWeakModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border border-slate-200 dark:border-slate-800 relative">
+            <button 
+              onClick={() => setIsWeakModalOpen(false)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            >
+              <AlertCircle size={24} className="rotate-45" />
+            </button>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/30 text-rose-600 rounded-2xl flex items-center justify-center">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold dark:text-white">Weaknesses Identified</h3>
+                <p className="text-sm text-slate-500">Urgent review recommended.</p>
+              </div>
+            </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {getWeakTopics().map((p, i) => (
+                <div key={i} className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">{p.subject}</span>
+                    <span className="text-xs font-bold text-rose-700 dark:text-rose-300">{p.score}%</span>
+                  </div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{p.topic}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Last attempt: {new Date(p.lastAttempt).toLocaleDateString()}</p>
+                </div>
+              ))}
+              {getWeakTopics().length === 0 && (
+                <div className="text-center py-12">
+                  <CheckCircle2 className="mx-auto text-emerald-500 mb-2" size={48} />
+                  <p className="text-slate-500">No weak topics found. Excellent work!</p>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => setIsWeakModalOpen(false)}
+              className="w-full mt-6 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-4 rounded-2xl font-bold hover:opacity-90 transition-opacity"
+            >
+              I'm on it!
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Performance Graph Section */}
       <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 relative overflow-hidden">

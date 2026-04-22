@@ -311,7 +311,7 @@ export const HomeworkTab: React.FC<HomeworkTabProps> = ({ userProfile }) => {
                       {expired ? <AlertTriangle size={12} /> : <Clock4 size={12} />}
                       {expired ? 'Past Due' : 'Active'}
                     </div>
-                    {isAdmin && (
+                    {isStaffOrAdmin && (
                       <button
                         onClick={() => handleDelete(hw.id)}
                         className="text-slate-400 hover:text-rose-500 transition-colors p-1"

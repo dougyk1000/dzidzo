@@ -228,6 +228,7 @@ function DzidzoApp() {
   const [connectionError, setConnectionError] = useState(false);
   const [isAdminWorld, setIsAdminWorld] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
+  const [logoClicks, setLogoClicks] = useState(0);
 
   const t = translations[language];
 
@@ -432,6 +433,24 @@ function DzidzoApp() {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Login failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    // Reset clicks after 2 seconds
+    if (logoClicks > 0) {
+      const timer = setTimeout(() => setLogoClicks(0), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoClicks]);
+
+  const handleLogoClick = () => {
+    const newCount = logoClicks + 1;
+    if (newCount >= 5) {
+      setIsAdminLoginOpen(true);
+      setLogoClicks(0);
+    } else {
+      setLogoClicks(newCount);
     }
   };
 
@@ -873,7 +892,6 @@ function DzidzoApp() {
                     { id: 'resources', label: t.resources, icon: FileText },
                     { id: 'revision', label: t.revisionPlan, icon: BookOpen },
                     { id: 'settings', label: t.settings, icon: Settings },
-                    ...(isAdmin ? [{ id: 'admin', label: t.admin, icon: ShieldCheck }] : []),
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -924,7 +942,7 @@ function DzidzoApp() {
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col transition-colors duration-300 overflow-y-auto scrollbar-hide">
         <div className="p-6 flex flex-col min-h-full">
-          <div className="flex items-center gap-3 mb-12">
+          <div onClick={handleLogoClick} className="flex items-center gap-3 mb-12 cursor-default select-none">
             <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-none">
               <GraduationCap size={28} />
             </div>
@@ -941,7 +959,6 @@ function DzidzoApp() {
               { id: 'resources', label: t.resources, icon: FileText, tooltip: 'Study materials and notes' },
               { id: 'revision', label: t.revisionPlan, icon: BookOpen, tooltip: 'Your personalized study schedule' },
               { id: 'settings', label: t.settings, icon: Settings, tooltip: 'App preferences and profile' },
-              ...(isAdmin ? [{ id: 'admin', label: t.admin, icon: ShieldCheck, tooltip: 'Admin Management' }] : [])
             ].map((item) => (
               <Tooltip key={item.id} text={item.tooltip} position="right">
                 <button 
