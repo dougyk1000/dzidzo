@@ -228,6 +228,14 @@ export async function getTutorResponse(
   studentName?: string,
   progress: ProgressRecord[] = []
 ): Promise<TutorAIResponse> {
+  // Check for API Key first
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    return {
+      text: "Developer Warning: `GEMINI_API_KEY` is missing from the environment. If you are on Vercel, please add it to your environment variables. If you are on AI Studio, please ensure it is set in the Settings menu."
+    };
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     
@@ -313,10 +321,11 @@ export async function getTutorResponse(
     return {
       text: response.text || "I'm sorry, I couldn't generate a response. Please try again."
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
+    const errorMsg = error?.message || "Unknown error";
     return {
-      text: "Something went wrong. Please check your connection and try again."
+      text: `Dzidzo (AI) is having trouble connecting: "${errorMsg}". Please check your internet connection or try again in a moment.`
     };
   }
 }
@@ -329,6 +338,17 @@ export async function generateWeeklySummary(
   studentName: string,
   style?: string
 ): Promise<{ summary: string; rating: number; potential: string; weaknesses: string[] }> {
+  // Check for API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    return {
+      summary: "Developer Warning: GEMINI_API_KEY is missing. Please add it to your environment variables.",
+      rating: 0,
+      potential: "N/A",
+      weaknesses: []
+    };
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     const dataSummary = progress.map(p => `- Subject: ${p.subject}, Topic: ${p.topic}, Score: ${p.score}%, Type: ${p.type || 'study'}, Priority: ${p.weaknessLevel}`).join('\n');
@@ -387,6 +407,12 @@ export async function analyzeStudentProgress(
   studentName: string,
   style?: string
 ): Promise<string> {
+  // Check for API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    return "Developer Warning: GEMINI_API_KEY is missing.";
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     const dataSummary = progress.map(p => `- [${p.subject}] ${p.topic}: Score ${p.score}%, Type: ${p.type || 'study'}, Priority: ${p.weaknessLevel}`).join('\n');
@@ -425,6 +451,12 @@ export async function solvePastPaperQuestion(
   history: any[] = [],
   studentName?: string
 ): Promise<string> {
+  // Check for API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    return "Developer Warning: GEMINI_API_KEY is missing.";
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -461,6 +493,13 @@ export async function generateQuizQuestions(
   count: number = 5,
   difficulty: Difficulty = 'Medium'
 ): Promise<QuizQuestion[]> {
+  // Check for API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    console.error("GEMINI_API_KEY is missing.");
+    return [];
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     const topicPrompt = topic ? `\n\nFOCUS TOPIC: ${topic}` : "";
@@ -587,6 +626,13 @@ export async function generateMockExam(
   count: number = 10,
   difficulty: Difficulty = 'Hard'
 ): Promise<QuizQuestion[]> {
+  // Check for API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    console.error("GEMINI_API_KEY is missing.");
+    return [];
+  }
+
   try {
     const model = "gemini-3-flash-preview";
     

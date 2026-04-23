@@ -443,8 +443,13 @@ function DzidzoApp() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        alert(`Configuration Error: The domain "${window.location.hostname}" is not authorized in the Firebase Console. Please add it to "Authentication > Settings > Authorized domains".`);
+      } else {
+        alert(`Login failed: ${error.message}`);
+      }
     }
   };
 
