@@ -17,6 +17,19 @@ const SYSTEM_INSTRUCTIONS = (
 You are ${chatbotName}, an expert ${board} tutor for ${level} students at Marchwood Senior School.
 Your goal is to help students learn these subjects: ${subjects.join(', ')} step-by-step at a ${level} level.
 
+ZIMSEC & CAMBRIDGE EXAMINER INSIGHTS (CRITICAL):
+- You possess deep knowledge of official Examiner Reports for both ${board} and Cambridge.
+- ALWAYS point out specific areas where students historically lose marks (e.g., in Physics Paper 2, students often lose marks for missing units or incorrect significant figures).
+- Use "Examiner Warning" callouts for these common pitfalls.
+- FORMAT: Use a blockquote with a bold header for these warnings (e.g., "> **EXAMINER WARNING**: Be careful with units!").
+- Ensure students focus on key marking points recognized by ${board} examiners.
+
+LOCAL GEOGRAPHY CASE STUDIES:
+- For Geography, prioritize local Zimbabwean case studies when discussing Paper 2 and Paper 3 concepts.
+- Examples: Effects of Cyclone Idai (2019) in Chimanimani/Chipinge, settlement patterns in Harare (e.g. Epworth vs Borrowdale), farming models in Mazowe/Mashonaland Central, mining in the Great Dyke (Zimasco, Unki), and tourism in Victoria Falls or Hwange.
+- Discuss land redistribution impacts, rainfall patterns in agro-ecological regions (Region 1 to 5), and urbanisation challenges like water supply in Bulawayo.
+- Provide factual, detailed local context to give students an "edge" in their exams.
+
 DIAGRAM GENERATION RULES (CRITICAL):
 - ONLY call 'generate_diagram' if a visual is ABSOLUTELY ESSENTIAL for understanding (e.g., biological structures, complex circuit diagrams, geometric proofs).
 - DO NOT generate diagrams for simple concepts that can be explained with text or LaTeX.
@@ -142,6 +155,56 @@ const generateDiagramTool: FunctionDeclaration = {
   }
 };
 
+const renderGraphTool: FunctionDeclaration = {
+  name: "render_interactive_graph",
+  description: "Render an interactive mathematical graph (e.g., parabola, sine wave, linear function) that students can manipulate via sliders to see how constants affect the curve.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      type: {
+        type: Type.STRING,
+        enum: ["parabola", "linear", "sine", "cosine", "exponential"],
+        description: "The type of function to graph."
+      },
+      title: { type: Type.STRING, description: "Title of the graph." },
+      equation: { type: Type.STRING, description: "Standard form equation (e.g. y = ax^2 + bx + c)." },
+      params: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: "Name of the constant (e.g. 'a', 'b', 'c')." },
+            min: { type: Type.NUMBER },
+            max: { type: Type.NUMBER },
+            step: { type: Type.NUMBER },
+            defaultValue: { type: Type.NUMBER }
+          },
+          required: ["name", "min", "max", "defaultValue"]
+        }
+      }
+    },
+    required: ["type", "equation", "params"]
+  }
+};
+
+const renderCodeSandboxTool: FunctionDeclaration = {
+  name: "render_code_sandbox",
+  description: "Provide an interactive code sandbox for Computer Science students to write, run, and debug code (Python, JavaScript).",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      language: {
+        type: Type.STRING,
+        enum: ["python", "javascript"],
+        description: "The programming language for the sandbox."
+      },
+      initialCode: { type: Type.STRING, description: "The starting code to show in the editor." },
+      instructions: { type: Type.STRING, description: "Brief instructions or objective for the student." }
+    },
+    required: ["language", "initialCode"]
+  }
+};
+
 export interface TutorAIResponse {
   text: string;
   imageUrl?: string;
@@ -220,7 +283,7 @@ export async function getTutorResponse(
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS(language, subjects, board, level, style, homeworkContext, chatbotName, studentName, progress),
         temperature: 0.7,
-        tools: [{ functionDeclarations: [startAssessmentTool, generateDiagramTool] }]
+        tools: [{ functionDeclarations: [startAssessmentTool, generateDiagramTool, renderGraphTool, renderCodeSandboxTool] }]
       },
     });
 

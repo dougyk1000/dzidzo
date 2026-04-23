@@ -14,13 +14,16 @@ import {
   where,
   updateDoc
 } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../utils/firestore-errors';
+import { OperationType } from '../utils/firestore-errors';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 import { cn } from '../utils';
 
 export function AdminDashboard() {
+  const { handleError, showSuccess } = useErrorHandler();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [pendingTeachers, setPendingTeachers] = useState<UserProfile[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterBoard, setFilterBoard] = useState<ExamBoard | 'All'>('All');
 
@@ -48,12 +51,12 @@ export function AdminDashboard() {
     const annQuery = query(collection(db, 'announcements'), orderBy('timestamp', 'desc'));
     const unsubAnn = onSnapshot(annQuery, (snapshot) => {
       setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Announcement)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'announcements'));
+    }, (error) => handleError(error, OperationType.LIST, 'announcements'));
 
     const resQuery = query(collection(db, 'resources'), orderBy('timestamp', 'desc'));
     const unsubRes = onSnapshot(resQuery, (snapshot) => {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'resources'));
+    }, (error) => handleError(error, OperationType.LIST, 'resources'));
 
     // Fetch pending accounts
     const pendingQuery = query(
@@ -62,12 +65,25 @@ export function AdminDashboard() {
     );
     const unsubTeachers = onSnapshot(pendingQuery, (snapshot) => {
       setPendingTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+    }, (error) => handleError(error, OperationType.LIST, 'users'));
+
+    // Fetch all registered users for administration
+    const usersQuery = query(
+      collection(db, 'users')
+    );
+    const unsubStudents = onSnapshot(usersQuery, (snapshot) => {
+      const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+      const sortedStudents = users
+        .filter(u => u.role === 'student')
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setAllUsers(sortedStudents);
+    }, (error) => handleError(error, OperationType.LIST, 'students'));
 
     return () => {
       unsubAnn();
       unsubRes();
       unsubTeachers();
+      unsubStudents();
     };
   }, []);
 
@@ -85,8 +101,9 @@ export function AdminDashboard() {
       setAnnTitle('');
       setAnnContent('');
       setAnnExpiry('');
+      showSuccess('Announcement posted successfully');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'announcements');
+      handleError(error, OperationType.WRITE, 'announcements');
     }
     setIsLoading(false);
   };
@@ -109,8 +126,9 @@ export function AdminDashboard() {
       setResDesc('');
       setResUrl('');
       setResContent('');
+      showSuccess('Resource added successfully');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'resources');
+      handleError(error, OperationType.WRITE, 'resources');
     }
     setIsLoading(false);
   };
@@ -119,7 +137,7 @@ export function AdminDashboard() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        alert("File too large. Max 2MB allowed.");
+        handleError(new Error('File size exceeds 2MB limit'), OperationType.WRITE, 'resources');
         return;
       }
       
@@ -150,9 +168,9 @@ export function AdminDashboard() {
         isAI: true
       });
       setQuizTopic('');
-      alert("AI Quiz generated and added to resources!");
+      showSuccess('AI Quiz generated and added to resources!');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'resources');
+      handleError(error, OperationType.WRITE, 'resources');
     }
     setIsGeneratingQuiz(false);
   };
@@ -160,8 +178,9 @@ export function AdminDashboard() {
   const handleDelete = async (table: string, id: string) => {
     try {
       await deleteDoc(doc(db, table, id));
+      showSuccess('Item deleted successfully');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `${table}/${id}`);
+      handleError(error, OperationType.DELETE, `${table}/${id}`);
     }
   };
 
@@ -196,9 +215,9 @@ export function AdminDashboard() {
         batch.set(newDocRef, res);
       });
       await batch.commit();
-      alert("Resources synced successfully from external sources!");
+      showSuccess('Resources synced successfully from external sources!');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'resources');
+      handleError(error, OperationType.WRITE, 'resources');
     }
     setIsLoading(false);
   };
@@ -208,8 +227,9 @@ export function AdminDashboard() {
       await updateDoc(doc(db, 'users', teacherId), {
         status: approve ? 'approved' : 'rejected'
       });
+      showSuccess(`Account ${approve ? 'approved' : 'rejected'} successfully`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${teacherId}`);
+      handleError(error, OperationType.UPDATE, `users/${teacherId}`);
     }
   };
 
@@ -300,6 +320,75 @@ export function AdminDashboard() {
               <p className="text-slate-400 italic">No pending signup requests to review.</p>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Registered Students Section */}
+      <section className="space-y-6">
+        <div className="flex items-center gap-3 text-slate-900 dark:text-white">
+          <Check className="text-emerald-500" />
+          <h2 className="text-2xl font-bold">Registered Students</h2>
+          <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs px-3 py-1 rounded-full font-bold">
+            {allUsers.length} Total
+          </span>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+                  <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Name</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Class</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Exam Board</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Subjects</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                {allUsers.map((student) => (
+                  <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center font-bold text-xs">
+                          {student.name.charAt(0)}
+                        </div>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">{student.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold ring-1 ring-inset ring-slate-200 dark:ring-slate-700">
+                        {student.class}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {student.examBoard}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {student.selectedSubjects.slice(0, 3).map((sub, i) => (
+                          <span key={i} className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-medium">
+                            {sub}
+                          </span>
+                        ))}
+                        {student.selectedSubjects.length > 3 && (
+                          <span className="text-[10px] text-slate-400 font-medium">+{student.selectedSubjects.length - 3} more</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {allUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                      No students registered yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

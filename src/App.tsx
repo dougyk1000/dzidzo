@@ -36,7 +36,9 @@ import {
   getDocs,
   limit
 } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from './utils/firestore-errors';
+import { NotificationProvider, useNotification } from './contexts/NotificationContext';
+import { OperationType } from './utils/firestore-errors';
+import { useErrorHandler } from './hooks/useErrorHandler';
 
 // Error Boundary Component
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
@@ -64,8 +66,8 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white font-sans">
         <div className="max-w-md w-full bg-slate-800 p-8 rounded-[2rem] border border-slate-700 shadow-2xl space-y-6">
-          <div className="w-16 h-16 bg-rose-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-rose-900/20">
-            <AlertTriangle size={32} />
+          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto shadow-lg">
+            <img src="/marchwood-logo.png" alt="Logo" className="w-12 h-12 object-contain" />
           </div>
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Portal Error</h2>
@@ -95,9 +97,11 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <DzidzoApp />
-    </ErrorBoundary>
+    <NotificationProvider>
+      <ErrorBoundary>
+        <DzidzoApp />
+      </ErrorBoundary>
+    </NotificationProvider>
   );
 }
 
@@ -134,8 +138,8 @@ function AdminLoginModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
         </button>
         
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-rose-600/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck size={32} />
+          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 p-2 shadow-inner border border-slate-800">
+            <img src="/marchwood-logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-2xl font-black text-white">Restricted Access</h2>
           <p className="text-slate-500 text-sm mt-2">Enter your developer credentials to enter the admin world.</p>
@@ -186,6 +190,7 @@ function AdminLoginModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
 
 // DzidzoApp
 function DzidzoApp() {
+  const { handleError, handleGeminiError, showSuccess } = useErrorHandler();
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -249,8 +254,9 @@ function DzidzoApp() {
         console.log("Firestore connected successfully");
         setConnectionError(false);
       } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
+        const msg = error instanceof Error ? error.message.toLowerCase() : '';
+        if (msg.includes('offline') || msg.includes('unavailable') || msg.includes('failed-precondition')) {
+          console.error("Connectivity issue detected:", msg);
           setConnectionError(true);
         }
       }
@@ -324,7 +330,7 @@ function DzidzoApp() {
         } catch (error) {
           console.error("Profile fetch error:", error);
           // If the default getDoc fails with offline error, try to warn the user
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          handleError(error, OperationType.GET, `users/${firebaseUser.uid}`);
           setConnectionError(true);
         }
       } else {
@@ -345,17 +351,17 @@ function DzidzoApp() {
     const annQuery = query(collection(db, 'announcements'), orderBy('timestamp', 'desc'), limit(5));
     const unsubAnn = onSnapshot(annQuery, (snapshot) => {
       setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Announcement)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'announcements'));
+    }, (error) => handleError(error, OperationType.LIST, 'announcements'));
 
     const resQuery = query(collection(db, 'resources'), orderBy('timestamp', 'desc'));
     const unsubRes = onSnapshot(resQuery, (snapshot) => {
       setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Resource)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'resources'));
+    }, (error) => handleError(error, OperationType.LIST, 'resources'));
 
     const hwQuery = query(collection(db, 'homework'), orderBy('timestamp', 'desc'));
     const unsubHw = onSnapshot(hwQuery, (snapshot) => {
       setHomeworkList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Homework)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'homework'));
+    }, (error) => handleError(error, OperationType.LIST, 'homework'));
 
     return () => {
       unsubAnn();
@@ -375,12 +381,12 @@ function DzidzoApp() {
     );
     const unsubMsg = onSnapshot(msgQuery, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages'));
+    }, (error) => handleError(error, OperationType.LIST, 'messages'));
 
     const progQuery = query(collection(db, 'progress'), where('uid', '==', user.uid));
     const unsubProg = onSnapshot(progQuery, (snapshot) => {
       setProgress(snapshot.docs.map(doc => doc.data() as ProgressRecord));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'progress'));
+    }, (error) => handleError(error, OperationType.LIST, 'progress'));
 
     return () => {
       unsubMsg();
@@ -397,10 +403,15 @@ function DzidzoApp() {
   const handleOnboardingComplete = async (data: Partial<UserProfile>) => {
     if (!user) return;
     
-    // Determine role: hardcoded admin check OR selected role
+    // Determine role and status
     let finalRole: 'student' | 'staff' | 'admin' = data.role || 'student';
+    let finalStatus: 'pending' | 'approved' | 'rejected' = 'approved';
+
     if (user.email === 'douglasnkowo0145@gmail.com') {
       finalRole = 'admin';
+      finalStatus = 'approved';
+    } else if (finalRole === 'staff' || finalRole === 'admin') {
+      finalStatus = 'pending';
     }
 
     const newProfile: UserProfile = {
@@ -415,15 +426,16 @@ function DzidzoApp() {
       studyStreak: 1,
       lastActive: new Date().toISOString(),
       role: finalRole,
-      status: finalRole === 'student' ? 'approved' : (data.status || 'pending'),
+      status: finalStatus,
       chatbotName: data.chatbotName || 'Dzidzo'
     };
     
     try {
       await setDoc(doc(db, 'users', user.uid), newProfile);
       setProfile(newProfile);
+      showSuccess('Your profile has been created successfully!');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+      handleError(error, OperationType.WRITE, `users/${user.uid}`);
     }
   };
 
@@ -472,8 +484,9 @@ function DzidzoApp() {
       await updateDoc(doc(db, 'users', user.uid), {
         bookmarkedResourceIds: newBookmarks
       });
+      showSuccess(isBookmarked ? 'Bookmark removed' : 'Resource bookmarked');
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      handleError(error, OperationType.UPDATE, `users/${user.uid}`);
       // Revert state on error if needed, though profile state update is optimistic
     }
   };
@@ -491,7 +504,7 @@ function DzidzoApp() {
     try {
       await addDoc(collection(db, 'messages'), userMsg);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      handleError(error, OperationType.WRITE, 'messages');
     }
 
     setIsLoading(true);
@@ -531,15 +544,23 @@ function DzidzoApp() {
       botMsg.imageUrl = aiResponse.imageUrl;
     }
 
-    if (aiResponse.toolCall && aiResponse.toolCall.name === 'start_assessment') {
-      const { type, subject, topic } = aiResponse.toolCall.args;
-      botMsg.assessmentSuggestion = { type, subject, topic };
+    if (aiResponse.toolCall) {
+      const { name, args } = aiResponse.toolCall;
+      
+      if (name === 'start_assessment') {
+        const { type, subject, topic } = args;
+        botMsg.assessmentSuggestion = { type, subject, topic };
+      } else if (name === 'render_interactive_graph') {
+        botMsg.interactiveGraph = args;
+      } else if (name === 'render_code_sandbox') {
+        botMsg.codeSandbox = args;
+      }
     }
 
     try {
       await addDoc(collection(db, 'messages'), botMsg);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      handleError(error, OperationType.WRITE, 'messages');
     }
     setIsLoading(false);
   };
@@ -564,7 +585,7 @@ function DzidzoApp() {
     try {
       await addDoc(collection(db, 'messages'), userMsg);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      handleError(error, OperationType.WRITE, 'messages');
     }
 
     const history = mapMessagesToHistory(messages);
@@ -591,7 +612,7 @@ function DzidzoApp() {
     try {
       await addDoc(collection(db, 'messages'), botMsg);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      handleError(error, OperationType.WRITE, 'messages');
     }
     setIsLoading(false);
   };
@@ -612,7 +633,7 @@ function DzidzoApp() {
         }
       }
     } catch (error) {
-      console.error('Failed to generate weekly summary:', error);
+      handleGeminiError(error);
     } finally {
       setIsGeneratingSummary(false);
     }
@@ -646,12 +667,12 @@ function DzidzoApp() {
 
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white animate-pulse">
-            <GraduationCap size={28} />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-xl border border-slate-100 dark:border-slate-800 p-4">
+            <img src="/marchwood-logo.png" alt="Logo" className="w-full h-full object-contain animate-pulse" />
           </div>
-          <p className="text-slate-400 font-medium">Loading Marchwood Portal...</p>
+          <p className="text-slate-400 font-bold tracking-widest uppercase text-xs animate-pulse">Initializing Portal...</p>
         </div>
       </div>
     );
@@ -744,8 +765,8 @@ function DzidzoApp() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 text-center space-y-6"
         >
-          <div className="w-20 h-20 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-            <X size={40} />
+          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto shadow-inner overflow-hidden border border-slate-200">
+            <img src="/marchwood-logo.png" alt="Logo" className="w-16 h-16 object-contain" />
           </div>
           <div className="space-y-2">
             <h2 className="text-2xl font-black text-slate-900 dark:text-white">Access Denied</h2>
@@ -776,8 +797,8 @@ function DzidzoApp() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-900 dark:bg-slate-800 rounded-lg flex items-center justify-center text-white">
-                <ShieldCheck size={24} />
+              <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                <img src="/marchwood-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
               </div>
               <h1 className="text-2xl font-black dark:text-white">Admin World</h1>
             </div>
@@ -827,8 +848,8 @@ function DzidzoApp() {
       {/* Mobile Header */}
       <header className="lg:hidden border-b p-4 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-            <GraduationCap size={24} />
+          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm overflow-hidden border border-slate-100">
+            <img src="/marchwood-logo.png" alt="Logo" className="w-8 h-8 object-contain" />
           </div>
           <div>
             <h1 className="text-lg font-bold dark:text-white">Marchwood</h1>
@@ -872,10 +893,9 @@ function DzidzoApp() {
                 <div className="flex items-center justify-between mb-8 shrink-0">
                   <div className="flex items-center gap-2">
                     <img 
-                      src="https://picsum.photos/seed/marchwood-senior-school-logo/200/200" 
+                      src="/marchwood-logo.png" 
                       alt="Marchwood Logo" 
-                      className="w-10 h-10 rounded-lg object-cover"
-                      referrerPolicy="no-referrer"
+                      className="w-10 h-10 object-contain"
                     />
                     <h1 className="text-lg font-bold dark:text-white">Marchwood</h1>
                   </div>
@@ -913,17 +933,28 @@ function DzidzoApp() {
                 </nav>
                 
                 <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800 pb-8 shrink-0">
-                  <button 
-                    onClick={toggleTheme}
-                    className="flex items-center gap-4 w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 transition-colors mb-4"
-                  >
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white dark:bg-slate-900 shadow-sm">
-                      {theme === 'dark' ? <Moon size={18} className="text-amber-400" /> : <Sun size={18} className="text-amber-500" />}
+                  <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Theme</p>
+                      {theme === 'dark' ? <Moon size={14} className="text-amber-400" /> : <Sun size={14} className="text-amber-500" />}
                     </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-bold dark:text-white">{theme === 'dark' ? t.themeDark : t.themeLight}</p>
-                    </div>
-                  </button>
+                    <button 
+                      onClick={toggleTheme}
+                      className={cn(
+                        "w-full h-10 rounded-xl transition-all relative flex items-center p-1 font-bold text-xs shadow-inner",
+                        theme === 'dark' ? "bg-slate-900 text-white" : "bg-white text-slate-900"
+                      )}
+                    >
+                      <div className="flex-1 text-center relative z-10">{t.themeLight}</div>
+                      <div className="flex-1 text-center relative z-10">{t.themeDark}</div>
+                      <motion.div 
+                        layout
+                        className="absolute inset-y-1 w-[48%] bg-blue-600 rounded-lg shadow-sm"
+                        animate={{ left: theme === 'dark' ? '51%' : '1%' }}
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      />
+                    </button>
+                  </div>
                   
                   <button 
                     onClick={handleLogout}
@@ -943,8 +974,8 @@ function DzidzoApp() {
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col transition-colors duration-300 overflow-y-auto scrollbar-hide">
         <div className="p-6 flex flex-col min-h-full">
           <div onClick={handleLogoClick} className="flex items-center gap-3 mb-12 cursor-default select-none">
-            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-none">
-              <GraduationCap size={28} />
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
+              <img src="/marchwood-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
             </div>
             <h1 className="text-xl font-bold tracking-tight dark:text-white">Marchwood</h1>
           </div>
@@ -977,14 +1008,29 @@ function DzidzoApp() {
             ))}
           </nav>
 
-          <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-2 mt-auto">
-            <button 
-              onClick={toggleTheme}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
-            >
-              {theme === 'dark' ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} className="text-slate-500" />}
-              {theme === 'dark' ? t.themeLight : t.themeDark}
-            </button>
+          <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4 mt-auto">
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Interface</p>
+                {theme === 'dark' ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
+              </div>
+              <button 
+                onClick={toggleTheme}
+                className={cn(
+                  "w-full h-9 rounded-xl transition-all relative flex items-center p-1 font-bold text-[10px] shadow-inner",
+                  theme === 'dark' ? "bg-slate-900 text-white" : "bg-white text-slate-900"
+                )}
+              >
+                <div className="flex-1 text-center relative z-10">{t.themeLight}</div>
+                <div className="flex-1 text-center relative z-10">{t.themeDark}</div>
+                <motion.div 
+                  layout
+                  className="absolute inset-y-1 w-[48%] bg-blue-600 rounded-lg shadow-sm"
+                  animate={{ left: theme === 'dark' ? '51%' : '1%' }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                />
+              </button>
+            </div>
             <div className="px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
                 <User size={16} />
@@ -1140,6 +1186,7 @@ function DzidzoApp() {
                       timestamp: Date.now()
                     });
                     setProgress(prev => [newRecord, ...prev]);
+                    showSuccess(`Result saved for ${selectedSubject}!`);
 
                     if (isFromTutor) {
                       setActiveTab('tutor');
@@ -1159,7 +1206,7 @@ function DzidzoApp() {
                       handleSendMessage(analysisPrompt);
                     }
                   } catch (error) {
-                    handleFirestoreError(error, OperationType.WRITE, 'progress');
+                    handleError(error, OperationType.WRITE, 'progress');
                   }
                 }}
               />
@@ -1206,6 +1253,7 @@ function DzidzoApp() {
                       timestamp: Date.now()
                     });
                     setProgress(prev => [newRecord, ...prev]);
+                    showSuccess(`Exam result saved for ${selectedSubject}!`);
 
                     if (isFromTutor) {
                       setActiveTab('tutor');
@@ -1225,7 +1273,7 @@ function DzidzoApp() {
                       handleSendMessage(analysisPrompt);
                     }
                   } catch (error) {
-                    handleFirestoreError(error, OperationType.WRITE, 'progress');
+                    handleError(error, OperationType.WRITE, 'progress');
                   }
                 }}
               />
@@ -1448,9 +1496,10 @@ function DzidzoApp() {
                             chatbotName: profile.chatbotName
                           });
                           setUpdateSuccess(true);
+                          showSuccess('Learning preferences updated!');
                           setTimeout(() => setUpdateSuccess(false), 3000);
                         } catch (error) {
-                          handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+                          handleError(error, OperationType.UPDATE, `users/${user.uid}`);
                         } finally {
                           setIsUpdatingPreferences(false);
                         }
@@ -1496,8 +1545,9 @@ function DzidzoApp() {
                                 }
                                 try {
                                   await updateDoc(doc(db, 'users', user.uid), { selectedSubjects: newSubjects });
+                                  showSuccess('Subjects updated');
                                 } catch (error) {
-                                  handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+                                  handleError(error, OperationType.UPDATE, `users/${user.uid}`);
                                 }
                               }}
                               className="hover:text-red-500 transition-colors"
@@ -1523,9 +1573,10 @@ function DzidzoApp() {
                                   await updateDoc(doc(db, 'users', user.uid), { 
                                     selectedSubjects: [...profile.selectedSubjects, val] 
                                   });
+                                  showSuccess(`Added ${val} to your subjects`);
                                   (e.target as HTMLInputElement).value = '';
                                 } catch (error) {
-                                  handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+                                  handleError(error, OperationType.UPDATE, `users/${user.uid}`);
                                 }
                               }
                             }
@@ -1540,22 +1591,29 @@ function DzidzoApp() {
 
               <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="text-xl font-bold mb-4 dark:text-white">Appearance</h3>
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-950 rounded-3xl border border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-3">
-                    {theme === 'dark' ? <Moon className="text-amber-400" /> : <Sun className="text-amber-500" />}
-                    <span className="font-semibold dark:text-white">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                    <div className="p-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm">
+                      {theme === 'dark' ? <Moon className="text-amber-400" size={20} /> : <Sun className="text-amber-500" size={20} />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm dark:text-white">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</p>
+                      <p className="text-[10px] text-slate-500 uppercase font-black">Interface Theme</p>
+                    </div>
                   </div>
                   <button 
                     onClick={toggleTheme}
                     className={cn(
-                      "w-12 h-6 rounded-full transition-all relative",
+                      "w-14 h-7 rounded-full transition-all relative flex items-center p-1",
                       theme === 'dark' ? "bg-blue-600" : "bg-slate-300"
                     )}
                   >
-                    <div className={cn(
-                      "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all",
-                      theme === 'dark' ? "right-1" : "left-1"
-                    )} />
+                    <motion.div 
+                      layout
+                      className="w-5 h-5 rounded-full bg-white shadow-sm"
+                      animate={{ x: theme === 'dark' ? 28 : 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
                   </button>
                 </div>
               </div>

@@ -6,6 +6,8 @@ import rehypeKatex from 'rehype-katex';
 import { ChatMessage, Language, Subject, Homework } from '../types';
 import { cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { InteractiveGraph } from './interactive/InteractiveGraph';
+import { CodeSandbox } from './interactive/CodeSandbox';
 
 import { translations } from '../translations';
 
@@ -81,12 +83,13 @@ export function ChatBox({
               animate={{ scale: 1, opacity: 1 }}
               className="relative"
             >
-              <img 
-                src="https://picsum.photos/seed/dzidzo-learning/400/300" 
-                alt="Learning" 
-                className="w-64 h-48 rounded-3xl object-cover shadow-2xl border-4 border-white dark:border-slate-800"
-                referrerPolicy="no-referrer"
-              />
+              <div className="w-48 h-48 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-slate-50 dark:border-slate-800 p-8">
+                <img 
+                  src="/marchwood-logo.png" 
+                  alt="Marchwood Logo" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
               <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
                 <Bot size={24} />
               </div>
@@ -165,6 +168,16 @@ export function ChatBox({
                       {t.takeAssessment.replace('{type}', msg.assessmentSuggestion.type)}
                       <ArrowRight size={18} />
                     </button>
+                  </div>
+                )}
+                {msg.interactiveGraph && (
+                  <div className="mt-4">
+                    <InteractiveGraph {...msg.interactiveGraph} />
+                  </div>
+                )}
+                {msg.codeSandbox && (
+                  <div className="mt-4">
+                    <CodeSandbox {...msg.codeSandbox} />
                   </div>
                 )}
               </div>

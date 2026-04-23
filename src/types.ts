@@ -57,6 +57,23 @@ export interface ChatMessage {
     subject: Subject;
     topic?: string;
   };
+  interactiveGraph?: {
+    type: 'parabola' | 'linear' | 'sine' | 'cosine' | 'exponential';
+    title: string;
+    equation: string;
+    params: {
+      name: string;
+      min: number;
+      max: number;
+      step?: number;
+      defaultValue: number;
+    }[];
+  };
+  codeSandbox?: {
+    language: 'python' | 'javascript';
+    initialCode: string;
+    instructions?: string;
+  };
 }
 
 export interface ProgressRecord {

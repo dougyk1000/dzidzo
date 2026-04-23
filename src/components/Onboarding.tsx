@@ -78,8 +78,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <img src={`https://picsum.photos/seed/onboarding-step-${step}/800/800`} alt="bg" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
         <div className="flex items-center gap-3 relative z-10">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
-            <GraduationCap size={24} />
+          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
+            <img src="/marchwood-logo.png" alt="Marchwood Logo" className="w-10 h-10 object-contain" />
           </div>
           <h2 className="text-2xl font-bold dark:text-white tracking-tight">Welcome to Marchwood</h2>
         </div>
@@ -102,14 +102,24 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Class / Grade</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Class</label>
+                <select
                   value={className}
                   onChange={(e) => setClassName(e.target.value)}
-                  placeholder="e.g. 4A or Grade 10"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer font-bold text-slate-900 dark:text-white"
+                >
+                  <option value="" disabled>Select your class</option>
+                  {[
+                    'Form 1 West', 'Form 1 East', 'Form 1 Cambridge',
+                    'Form 2 West', 'Form 2 East', 'Form 2 Cambridge',
+                    'Form 3 West', 'Form 3 East', 'Form 3 Cambridge',
+                    'Form 4 West', 'Form 4 East', 'Form 4 Cambridge',
+                    'Lower Six Sciences', 'Lower Six Commercials', 'Lower Six Arts',
+                    'Upper Six Sciences', 'Upper Six Commercial', 'Upper Six Arts'
+                  ].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <button
